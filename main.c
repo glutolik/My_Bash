@@ -1,5 +1,6 @@
 #include <unistd.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <assert.h>
 #include <sys/wait.h>
 #include <string.h>
@@ -23,8 +24,7 @@ int main(int argc, char **argv)
 
     while (1)
     {
-        //printf(">> \033[32m%s:\033[0m:%s\n", getenv("USER"), path);
-        printf("[\033[32mUSER\033[0m]:%s>", path);
+        printf("[\033[32m%s\033[0m]:%s>", getenv("USER"), path);
         code = scanf("%s", s);
 
         if (strcmp(s, "cd") == 0)
