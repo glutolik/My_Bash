@@ -5,7 +5,14 @@
 #include <sys/wait.h>
 #include <string.h>
 #include <errno.h>
+#include <dirent.h>
 
+int outErr(int n)
+{
+    if (n != 0)
+        fprintf(stderr, "ERROR: errno = %d\n", errno);
+    return n;
+}
 int main(int argc, char **argv)
 {
     char s[256];
@@ -24,14 +31,15 @@ int main(int argc, char **argv)
 
     while (1)
     {
-        printf("[\033[32m%s\033[0m]:%s>", getenv("USER"), path);
-        code = scanf("%s", s);
+        printf("[\033[32m%s\033[0m]:%s> ", getenv("USER"), path);
+        gets(s);
+        //scanf("%s", s);
 
         if (strcmp(s, "cd") == 0)
         {
             char newpath[256];
             scanf("%s", newpath);
-            if (newpath[0] == '/')
+            /*if (newpath[0] == '/')
                 strcpy(path, newpath);
             else if (strcmp(newpath, "..") == 0)
             {
@@ -47,7 +55,10 @@ int main(int argc, char **argv)
             {
                 path[strlen(path)] = '/';
                 strcat(path, newpath);
-            }
+            }*/
+            int code = chdir(newpath);
+            if (outErr(code) == 0)
+                getcwd(path, sizeof(path));
             continue;
         }
         if (code == EOF || strcmp(s, "exit") == 0)
@@ -73,23 +84,46 @@ int main(int argc, char **argv)
         if (child == 0)
         {
             int code;
+            int i;
+            int len = strlen(s);
+            int argc = 1;
+            for (i = 0; i < len; ++i)
+                if (s[i] == ' ')
+                    ++argc;
+            char argv[argc][256];
+            char *nextArg = strtok(s, " ");
             if (s[0] == '.')
             {
                 strcpy(file_addr, path);
-                strcat(file_addr, s + 1);
+                strcat(file_addr, nextArg + 1);
+                strcpy(argv[0], file_addr);
                 printf("#starting: %s...\n", file_addr);
-                code = execl(file_addr, file_addr, NULL);
             }
             else
             {
-                sprintf(file_addr, "/bin/%s", s);
-                //file_addr = strcat(file_addr, s);
+                sprintf(file_addr, "/bin/%s", nextArg);
+                //strcat(file_addr, s);
+                strcpy(argv[0], file_addr);
                 printf("%s: %s...\n", path, file_addr);
-                code = execl(file_addr, file_addr, path, NULL);
             }
 
-            if (code == -1)
-                printf("ERROR: errno = %d\n", errno);
+            i = 1;
+            while (nextArg != NULL && i < argc)
+            {
+                nextArg = strtok(NULL, " ");
+                strcpy(argv[i], nextArg);
+                ++i;
+            }
+            char** argvr = (char**)malloc(argc*sizeof(char*));
+            for (i = 0; i < argc; ++i)
+            {
+                argvr[i] = (char*)malloc(strlen(argv[i])*sizeof(char));
+                strncpy(argvr[i], argv[i], strlen(argv[i]));
+            }
+            //code = execl(file_addr, file_addr, NULL);
+            code = execv(file_addr, argvr);
+
+            outErr(code);
 
             return 0;
         }
