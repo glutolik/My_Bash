@@ -76,7 +76,7 @@ int main(int argc, char **argv)
                 getcwd(path, sizeof(path));
             continue;
         }
-        printf("%s isn't a internal comand\n", comName);
+        //printf("%s isn't a internal comand\n", comName);
 
         pid_t child = fork();
 
@@ -108,7 +108,7 @@ int main(int argc, char **argv)
                 ++i;
             }
 
-            if (s[0] == '.' && pathAcc("./", comName))
+            if (s[0] == '.' && pathAcc("", comName) == 0)
             {
                 strcpy(file_addr, path);
                 strcat(file_addr, comName + 1);
