@@ -13,6 +13,7 @@ int outErr(int n)
         fprintf(stderr, "ERROR: errno = %d\n", errno);
     return n;
 }
+
 int pathAcc(const char* path, const char* file)
 {
     char fullPath[256];
@@ -20,6 +21,38 @@ int pathAcc(const char* path, const char* file)
     strcat(fullPath, file);
     return access(fullPath, F_OK);
 }
+
+/*
+
+Ищет команду comand_name во всех каталогах, упомянутых в переменной $PATH
+В случае успеха записывает в строку dst полный путь до исполняемого файла.
+Если не найден исполняемый файл, то записывает в dst пустую строку.
+
+*/
+char *get_command_path(char *command_name, char *dst)
+{
+    char *env_path = getenv("PATH");
+    char *current = strtok(env_path, ":");
+
+    while (current != NULL)
+    {
+        current = strtok(NULL, ":");
+
+        struct stat info;
+        char full_path[PATH_MAX + 1];
+        sprintf(full_path, "%s/%s", current, command_name);
+
+        if (lstat(full_path, &info) == 0)
+        {
+            strcpy(dst, full_path);
+            return dst;
+        }
+    }
+
+    strcpy(dst, "");
+    return dst;
+}
+
 int main(int argc, char **argv)
 {
     char s[256];
