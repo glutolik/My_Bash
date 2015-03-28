@@ -36,17 +36,16 @@ char *get_command_path(char *command_name, char *dst)
 
     while (current != NULL)
     {
-        current = strtok(NULL, ":");
-
-        struct stat info;
         char full_path[PATH_MAX + 1];
         sprintf(full_path, "%s/%s", current, command_name);
 
-        if (lstat(full_path, &info) == 0)
+        if (access(full_path, F_OK) == 0)
         {
             strcpy(dst, full_path);
             return dst;
         }
+
+        current = strtok(NULL, ":");
     }
 
     strcpy(dst, "");
