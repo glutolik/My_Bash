@@ -64,7 +64,29 @@ int bind_two_apps(int first, int input_fd, int output_fd, const char* app_name, 
     return read_fd;
 }
 
-int run_comand_chain(int d_in, int d_out, int d_err, const char* app_name, char *const argv[], int* returned_code)
+int run_comand_chain(int d_in, int d_out, int d_err, int comand_number, 
+	const char** apps_names, char** apps_args[], int* returned_code)
 {
-	
+	int next;
+	for(size_t i = 0; i < comand_number; ++i)
+	{
+	  //если команда последняя, то писать в d_out, иначе в соединяющий пайп	
+		int current_out = (i + 1 == comand_number)? d_out : -1;
+		if (i + 1 == comand_number)
+		{
+			printf("LAST:\n");
+		}
+		printf("%s\n", apps_names[i]);
+	  //если команда первая, то читать из d_in	
+		if (i == 0)
+		{
+			printf("FIRST\n");
+			next = bind_two_apps(IS_FIRST, d_in, current_out, apps_names[i], apps_args[i]);
+		}
+	  //иначе из соединительного пайпа	
+		else
+		{
+			next = bind_two_apps(IS_NOT_FIRST, next, current_out, apps_names[i], apps_args[i]);	
+		}
+	}
 }

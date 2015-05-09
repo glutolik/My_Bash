@@ -7,7 +7,7 @@
 #include <errno.h>
 #include <dirent.h>
 #include "app_running.h"
-
+/*
 int outErr(int n)
 {
     if (n != 0)
@@ -22,7 +22,7 @@ int pathAcc(const char* path, const char* file)
     strcat(fullPath, file);
     return access(fullPath, F_OK);
 }
-
+*/
 /*
 
 Ищет команду comand_name во всех каталогах, упомянутых в переменной $PATH
@@ -30,6 +30,7 @@ int pathAcc(const char* path, const char* file)
 Если не найден исполняемый файл, то записывает в dst пустую строку.
 
 */
+/*
 char *get_command_path(char *command_name, char *dst)
 {
     char *env_path = getenv("PATH");
@@ -52,6 +53,7 @@ char *get_command_path(char *command_name, char *dst)
     strcpy(dst, "");
     return dst;
 }
+*/
 
 int main(int argc, char **argv)
 {
@@ -59,23 +61,11 @@ int main(int argc, char **argv)
     ftruncate(fout, 0);
     int fin = open("values.txt", O_RDWR);
 
-    /*int pipes[2];
-    pipe(pipes);
-
     char* args[] = {"echo", "-e", "1\n8\n3\n4\n5\n2", NULL};
-    run_application(0, pipes[1], 2, "echo", args, NULL);
-    //char buf[100];
-    //read(pipes[0], buf, 100);
-    //printf("%s\n", buf);
-    close(pipes[1]);
     char* args2[] = {"sort", NULL};
-    run_application(pipes[0], fout, 2, "sort", args2, NULL);
-    //run_application(fin, 1, 2, "echo", args, NULL);*/
-    char* args[] = {"echo", "-e", "1\n8\n3\n4\n5\n2", NULL};
-    int next = bind_two_apps(IS_FIRST, 0, -1, "echo", args);
-
-    char* args2[] = {"sort", NULL};
-    int conv_out = bind_two_apps(IS_NOT_FIRST, next, 1, "sort", args2);
+    char** all_args[] = {args, args2};
+    char* names[] = {"echo", "sort"};
+    run_comand_chain(fin, fout, 2, 2, names, all_args, NULL);
     /*char buf[100];
     read(conv_out, buf, 100);
     printf("%s\n", buf);
