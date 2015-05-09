@@ -6,6 +6,7 @@
 #include <string.h>
 #include <errno.h>
 #include <dirent.h>
+#include "app_running.h"
 
 int outErr(int n)
 {
@@ -167,7 +168,8 @@ int main(int argc, char **argv)
                 strncpy(argvr[i], argv[i], strlen(argv[i]));
             }
             //code = execl(file_addr, file_addr, NULL);
-            code = execv(file_addr, argvr);
+            //code = execv(file_addr, argvr);
+            code = run_application(0, 1, 2, file_addr);
 
             free(argvr);
 
