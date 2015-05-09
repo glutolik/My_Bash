@@ -6,7 +6,8 @@
 #include <string.h>
 #include <errno.h>
 #include <dirent.h>
-
+#include "app_running.h"
+/*
 int outErr(int n)
 {
     if (n != 0)
@@ -21,7 +22,7 @@ int pathAcc(const char* path, const char* file)
     strcat(fullPath, file);
     return access(fullPath, F_OK);
 }
-
+*/
 /*
 
 Ищет команду comand_name во всех каталогах, упомянутых в переменной $PATH
@@ -29,6 +30,7 @@ int pathAcc(const char* path, const char* file)
 Если не найден исполняемый файл, то записывает в dst пустую строку.
 
 */
+/*
 char *get_command_path(char *command_name, char *dst)
 {
     char *env_path = getenv("PATH");
@@ -51,10 +53,26 @@ char *get_command_path(char *command_name, char *dst)
     strcpy(dst, "");
     return dst;
 }
+*/
 
 int main(int argc, char **argv)
 {
-    char s[256];
+    int fout = open("new.txt", O_RDWR);
+    ftruncate(fout, 0);
+    int fin = open("values.txt", O_RDWR);
+
+    char* args[] = {"echo", "-e", "1\n8\n3\n4\n5\n2", NULL};
+    char* args2[] = {"sort", NULL};
+    char** all_args[] = {args, args2};
+    char* names[] = {"echo", "sort"};
+    run_comand_chain(fin, fout, 2, 2, names, all_args, NULL);
+    /*char buf[100];
+    read(conv_out, buf, 100);
+    printf("%s\n", buf);
+*/
+    close(fout);
+    close(fin);
+    /*char s[256];
     char file_addr[256];
     char path[256];
     getcwd(path, sizeof(path));
@@ -167,7 +185,8 @@ int main(int argc, char **argv)
                 strncpy(argvr[i], argv[i], strlen(argv[i]));
             }
             //code = execl(file_addr, file_addr, NULL);
-            code = execv(file_addr, argvr);
+            //code = execv(file_addr, argvr);
+            code = run_application(0, 1, 2, file_addr, argvr, NULL);
 
             free(argvr);
 
@@ -177,7 +196,7 @@ int main(int argc, char **argv)
         }
         void *status = NULL;
         wait(status);
-    }
+    }*/
     /*void *tmp = NULL;
     wait(tmp);
     printf("%d\n", a);*/
