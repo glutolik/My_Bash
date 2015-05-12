@@ -6,6 +6,7 @@
 #include <string.h>
 #include <errno.h>
 #include <dirent.h>
+#include "app_running.h"
 
 int outErr(int n)
 {
@@ -30,25 +31,32 @@ void strspcpy(char* output, const char* from)
     }
     output[i] = 0;
 }
-int callPars(char*** output, const char* callstr)
+int progSepar(char ch)
 {
-    while (*callstr != 0 && *callstr <= ' ')
+    if (ch != '|' && ch != '&' && ch != 0 && ch != '(' && ch != ')')
+        return -1;
+    else
+        return 0;
+}
+int oneProgPars(char*** output, const char* callstr)
+{
+    while (progSepar(*callstr) == -1 && *callstr <= ' ')
             ++callstr;
     int argc = 0;
     int i = 0;
-    while (callstr[i] != 0)
+    while (progSepar(callstr[i]) != 0)
     {
         while (callstr[i] > ' ')
         {
             if (callstr[i] == '\"' && (i == 0 || callstr[i - 1] != '\\'))
             {
                 ++i;
-                while (callstr[i] != '\"' && callstr[i] != 0)
+                while (callstr[i] != '\"' && progSepar(callstr[i]) != 0)
                     ++i;
             }
             ++i;
         }
-        while (callstr[i] != 0 && callstr[i] <= ' ')
+        while (progSepar(callstr[i]) != 0 && callstr[i] <= ' ')
             ++i;
         ++argc;
     }
@@ -56,7 +64,7 @@ int callPars(char*** output, const char* callstr)
     (*output)[argc] = NULL;
     int argnmb = 0;
     i = 0;
-    while (callstr[i] != 0)
+    while (progSepar(callstr[i]) != 0)
     {
         int arglen = 0;
         int reallen = 0;
@@ -65,12 +73,12 @@ int callPars(char*** output, const char* callstr)
             if (callstr[i + arglen] == '"' && (i + arglen == 0 || callstr[i + arglen - 1] != '\\'))
             {
                 ++arglen;
-                while (callstr[i + arglen] != '"' && callstr[i + arglen] != 0)
+                while (callstr[i + arglen] != '"' && progSepar(callstr[i + arglen] != 0))
                 {
                     ++arglen;
                     ++reallen;
                 }
-                if (callstr[i + arglen] != 0)
+                if (progSepar(callstr[i + arglen]) != 0)
                     --reallen;
             }
             ++arglen;
@@ -90,7 +98,7 @@ int callPars(char*** output, const char* callstr)
         (*output)[argnmb][reallen] = 0;
         //printf("ps %d: %s\n", argnmb, (*output)[argnmb]);
         i = i + arglen;
-        while (callstr[i] != 0 && callstr[i] <= ' ')
+        while (progSepar(callstr[i]) != 0 && callstr[i] <= ' ')
             ++i;
         ++argnmb;
     }
@@ -159,58 +167,55 @@ int main(int argc, char **argv)
             int code = chdir(newDir);
             if (outErr(code) == 0)
                 getcwd(path, sizeof(path));
-            continue;
         }
-        //sprintf("%s isn't a internal comand\n", comName);
-
-        pid_t child = fork();
-
-        if (child == -1)
+        else
         {
-            perror("Can't fork.");
-            return 1;
-        }
+            //sprintf("%s isn't a internal comand\n", comName);
 
-        if (child == 0) //program execute
-        {
-            int code;
-            int i;
-            int len = strlen(callstr);
-            int argcr = 1;
-            char** argvr = NULL;
-            argcr = callPars(&argvr, callstr);
-            //printf("you try exec %s with %d args\n", argvr[0], argcr - 1);
-
-            if (callstr[0] == '.' && pathAcc("", comName) == 0) //не забыть вместо "." проверку на адрес
+            int code = 0;
+            int i = 0;
+            //int len = strlen(callstr);
+            char*** allsargv = NULL;
+            char** progNames = NULL;
+            int progCount = 1;
+            char* nextProg = callstr;
+            while(callstr[i] != 0)
             {
-                strcpy(file_addr, argvr[0]);
-                //sprintf(file_addr, "%s/%s", path, argvr[0]);
-                printf("starting: %s...\n", file_addr);
+                if (callstr[i] == '|')
+                    ++progCount;
+                ++i;
             }
-            else if (pathAcc("/bin/", comName) == 0) //и аналогично для всех директорий из $PATH - парсить getenv(PATH) по ':'
+            allsargv = (char***)malloc((progCount)*sizeof(char**));
+            progNames = (char**)malloc((progCount)*sizeof(char*));
+            for (i = 0; i < progCount; ++i)
             {
-                sprintf(file_addr, "/bin/%s", argvr[0]);
-                printf("%s: %s...\n", path, file_addr);
+                oneProgPars(allsargv + i, nextProg);
+                progNames[i] = (char*)malloc((strlen(allsargv[i][0]) + 1)*sizeof(char));
+                strcpy(progNames[i], allsargv[i][0]);
+                progNames[i][strlen(allsargv[i][0])] = 0;
+                while(*nextProg != 0 && *nextProg != '|')
+                    ++nextProg;
+                while(*nextProg != 0 && progSepar(*nextProg) == 0 || *nextProg <= ' ')
+                    ++nextProg;
             }
-            else
+            if (run_comand_chain(0, 1, 2, progCount, progNames, allsargv, &code) == -1)
             {
                 printf("I can't find this comand: %s\n", comName);
                 printf("You can see \"help\", which hasn't realized yet\n");
-                return 1;
+                continue;
             }
-
-            strcpy(argvr[0], file_addr);
-            code = execv(file_addr, argvr);
-
-            for (i = 0; i < argcr; ++i)
-                free(argvr[i]);
-            free(argvr);
-            outErr(code);
-
-            return 0;
+            for (i = 0; i < progCount; ++i)
+            {
+                int j = 0;
+                while(allsargv[i][j] != NULL)
+                {
+                    free(allsargv[i][j]);
+                    ++j;
+                }
+                free(progNames[i]);
+                free(allsargv[i]);
+            }
         }
-        void *status = NULL;
-        wait(status);
     }
     /*void *tmp = NULL;
     wait(tmp);
