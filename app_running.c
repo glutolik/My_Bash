@@ -75,7 +75,7 @@ int bind_two_apps(int first, int input_fd, int output_fd, const char* app_name, 
 	}
 	if (run_application(input_fd, write_fd, 2, app_name, argv, NULL) == -1)
 	{
-		return -1;
+		return -2;
 	}
   //если это не первая команда в цепочке, то следует закрыть соединяющий входной пайп   
     if (first != IS_FIRST)
@@ -108,7 +108,7 @@ int run_comand_chain(int d_in, int d_out, int d_err, int comand_count,
 		{
 			next = bind_two_apps(IS_NOT_FIRST, next, current_out, apps_names[i], apps_args[i]);	
 		}
-		if (next == -1)
+		if (next == -2)
 		{
 			return -1;
 		}
