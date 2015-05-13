@@ -1,5 +1,7 @@
 #include "calls.h"
 
+int maxCallLen = 512;
+
 void strspcpy(char* output, const char* from)
 {
     int i = 0;
@@ -9,6 +11,21 @@ void strspcpy(char* output, const char* from)
         ++i;
     }
     output[i] = 0;
+}
+int getword(const char* stream, char* output)
+{
+    int i = 0;
+    while((stream[i] >= 'a' && stream[i] <= 'z') ||
+          (stream[i] >= 'A' && stream[i] <= 'Z') ||
+          (stream[i] >= '0' && stream[i] <= '9'))
+    {
+        output[i] = stream[i];
+        ++i;
+    }
+    if (i < 1)
+        return -1;
+    output[i] = 0;
+    return 0;
 }
 int progSepar(char ch)
 {
@@ -20,7 +37,7 @@ int progSepar(char ch)
 int oneProgPars(char*** output, const char* callstr)
 {
     while (progSepar(*callstr) == -1 && *callstr <= ' ')
-            ++callstr;
+        ++callstr;
     int argc = 0;
     int i = 0;
     while (progSepar(callstr[i]) != 0)
@@ -46,37 +63,63 @@ int oneProgPars(char*** output, const char* callstr)
     while (progSepar(callstr[i]) != 0)
     {
         int arglen = 0;
+        int firstlen = 0;
         int reallen = 0;
-        while (callstr[i + arglen] > ' ')
+        char forbindArg[256];
+        while (callstr[i + firstlen] > ' ')
         {
-            if (callstr[i + arglen] == '"' && (i + arglen == 0 || callstr[i + arglen - 1] != '\\'))
+            if (callstr[i + firstlen] == '"' && (i + firstlen == 0 || callstr[i + firstlen - 1] != '\\'))
             {
-                ++arglen;
-                while (callstr[i + arglen] != '"' && progSepar(callstr[i + arglen] != 0))
+                ++firstlen;
+                while (callstr[i + firstlen] != '"' && progSepar(callstr[i + firstlen] != 0))
                 {
-                    ++arglen;
+                    forbindArg[reallen] = callstr[i + firstlen];
+                    ++firstlen;
                     ++reallen;
                 }
-                if (progSepar(callstr[i + arglen]) != 0)
-                    --reallen;
+                if (progSepar(callstr[i + firstlen]) != 0)
+                    ++firstlen;
             }
-            ++arglen;
-            ++reallen;
-        }
-        (*output)[argnmb] = (char*)malloc((reallen + 1)*sizeof(char));
-        int j = 0;
-        reallen = 0;
-        for (j = i; j < i + arglen; ++j)
-        {
-            if (callstr[j] != '"' || (i != 0 && callstr[j - 1] == '\\'))
+            else
             {
-                (*output)[argnmb][reallen] = callstr[j];
+                forbindArg[reallen] = callstr[i + firstlen];
+                ++firstlen;
                 ++reallen;
             }
         }
-        (*output)[argnmb][reallen] = 0;
+        forbindArg[reallen] = 0;
+        int j = 0;
+        char varenv[256];
+        arglen = 0;
+        for (j = 0; j < reallen; ++j)
+        {
+            if (forbindArg[j] == '$' && getword(forbindArg + j + 1, varenv) == 0 && getenv(varenv) != NULL)
+            {
+                arglen = arglen + strlen(getenv(varenv));
+                j = j + strlen(varenv) + 1;
+            }
+            else
+                ++arglen;
+        }
+        (*output)[argnmb] = (char*)malloc((arglen + 1)*sizeof(char));
+        arglen = 0;
+        for (j = 0; j < reallen; ++j)
+        {
+            if (forbindArg[j] == '$' && getword(forbindArg + j + 1, varenv) == 0 && getenv(varenv) != NULL)
+            {
+                strcpy((*output)[argnmb] + arglen, getenv(varenv));
+                arglen = arglen + strlen(getenv(varenv));
+                j = j + strlen(varenv);
+            }
+            else
+            {
+                (*output)[argnmb][arglen] = forbindArg[j];
+                ++arglen;
+            }
+        }
+        (*output)[argnmb][arglen] = 0;
         //printf("ps %d: %s\n", argnmb, (*output)[argnmb]);
-        i = i + arglen;
+        i = i + firstlen;
         while (progSepar(callstr[i]) != 0 && callstr[i] <= ' ')
             ++i;
         ++argnmb;
@@ -84,7 +127,7 @@ int oneProgPars(char*** output, const char* callstr)
     return argc;
 }
 
-int oneStrCall(const char* callstr, char** path)
+int oneStrCall(const char* callstr, char* path, JobsList* jobs)
 {
     int len = strlen(callstr);
     if (len < 1)
@@ -117,9 +160,11 @@ int oneStrCall(const char* callstr, char** path)
         printf("\thelp - you are reading it now\n");
         printf("\tcd <path> - change directory to path\n");
         printf("\tjobs - print list of jobs - child processes\n");
-        printf("\tfg <nmb> - change job nmb to foreground\n");
-        printf("\tbg <nmb> - resume job nmb in background\n");
-        printf("syntax calls instead of internal comands:\n");
+        printf("\tjobfg <nmb> - change job nmb to foreground\n");
+        printf("\tjobbg <nmb> - resume job nmb in background\n");
+        printf("\tjobsig <nmb> <signal> - send signal to job process\n");
+        printf("\te-bash <scriptfile.ebs> - launch e-bash script\n");
+        printf("syntax of other calls:\n");
         printf("\t[path/]<programm> [args...] ['|'<samecall>] [&] [> output|< input]\n");
         printf("\tit is execute path/program (or paths from $PATH)\n");
         printf("\twhere samecall:[path/]<programm> [args...] [|<samecall>]\n");
@@ -140,15 +185,33 @@ int oneStrCall(const char* callstr, char** path)
             ++i;
         strcpy(newDir, callstr + i);
         int code = chdir(newDir);
-        if (outErr("cd", code) == 0)
-            getcwd(*path, sizeof(*path));
+        getcwd(path, 255);
         return 0;
     }
-    else if (strcmp(comName, "jobs") == 0 || strcmp(comName, "bg") == 0 || strcmp(comName, "fg") == 0)
+    else if (strcmp(comName, "jobs") == 0)
     {
-        printf("Error: I do not want to do any job!\n");
+        show_jobs(jobs);
         return 0;
     }
+    else if (strcmp(comName, "jobsig") == 0)
+    {
+        int nmb;
+        int sig;
+        sscanf(callstr, "jobsig%d%d", &nmb, &sig);
+        return signal_process(jobs, nmb, sig);
+    }
+    else if (strcmp(comName, "jobbg") == 0)
+    {
+        int nmb;
+        sscanf(callstr, "jobsig%d", &nmb);
+        return continue_process(jobs, nmb);
+    }
+    /*else if (strcmp(comName, "ebs"))
+    {
+        char** argvr;
+        oneProgPars(&argvr, callstr + 4);
+        scriptRunner(0, 1, argvr);
+    }*/
     else
     {
         //sprintf("%s isn't a internal comand\n", comName);
@@ -216,7 +279,33 @@ int oneStrCall(const char* callstr, char** path)
     }
 }
 
-int scriptRunner(int infd, int outfd, char* name, char** argv)
+int scriptRunner(char** argv)
 {
-    return -1;
+    char* filename = argv[1];
+    int scriptfd = open(filename, O_RDONLY);
+    if (scriptfd < 0)
+    {
+        fprintf(stderr, "Error: script file %s does not exist.\n", filename);
+        return -1;
+    }
+    JobsList* jobs = init_jobs_system(50);
+    struct stat st;
+    fstat(scriptfd, &st);
+    char* script = (char*)mmap(NULL, sizeof(char)*st.st_size, PROT_READ, MAP_SHARED, scriptfd, 0);
+    int i = 0;
+    char path[256];
+    getcwd(path, sizeof(path));
+    while (i < st.st_size)
+    {
+        char callstr[maxCallLen];
+        int j = i;
+        while (j < st.st_size && script[j] != '\n' && script[j] != 0)
+            ++j;
+        strncpy(callstr, script + i, j - i);
+        callstr[j - i] = 0;
+        i = j + 1;
+        oneStrCall(callstr, path, jobs);
+    }
+    close(scriptfd);
+    return 0;
 }

@@ -50,7 +50,7 @@ int UnicodeSymWidth(int ch)
     return len;
 }
 
-int maxCallLen = 512;
+extern int maxCallLen;
 
 int loadHistory(char*** oldhist)
 {
@@ -106,10 +106,22 @@ int pathAcc(const char* path, const char* file)
 
 int main(int argc, char **argv)
 {
+    if (argc > 1)
+    {
+        if (strcmp(argv[1], "--help") == 0 || strcmp(argv[1], "--version") == 0)
+        {
+            printf("Try e-bash. Only speed. Only quality. Only e-bash.\n");
+            return 0;
+        }
+        int code = scriptRunner(argv);
+        printf("script terminated with code %d.\n", code);
+        return code;
+    }
     char callstr[maxCallLen];
     char file_addr[256];
     char path[256];
     getcwd(path, sizeof(path));
+    JobsList* jobs = init_jobs_system(50);
     int code;
 
     int i = 0;
@@ -139,11 +151,13 @@ int main(int argc, char **argv)
         int len = 0;
         int cur = 0;
         callstr[0] = 0;
+        int infolen = strlen(getenv("USER")) + strlen(path) + 5;
         int ch = mygch();
-        while ((char)ch != '\n' && (char)ch != EOF) //reading callstr
+        while ((char)ch != '\n' && (char)ch != EOF) //reading and mdifying callstr
         {
             int i;
-            int oldlen = len + strlen(getenv("USER")) + strlen(path) + 5;
+            int oldlen = len;
+            int oldcur = cur;
             if ((char)ch == 127) //backspace
             {
                 --len;
@@ -215,12 +229,12 @@ int main(int argc, char **argv)
             else if ((char)ch == '\t') //tab, ch == 32521
             {
             }
-            else if (len < maxCallLen - 4 && ((char)ch >= ' ' || (char)ch < 0))
+            else if (len < maxCallLen - 4 && (char)ch >= ' ')
             {
                 i = 0;
                 //printf("%c", ch);
                 //fflush(stdout);
-                while (i < 4) //for Unicode multichar coding (now it is not availiable)
+                /*while (i < 4) //for Unicode multichar coding (now it is not availiable)
                 {
                     char nch = *((char*)(&ch) + i);
                     if ((nch >= ' ' && nch < 127) || (nch < 0))
@@ -233,25 +247,34 @@ int main(int argc, char **argv)
                         ++cur;
                     }
                     ++i;
-                }
+                }*/
+                int j = len;
+                for (j = len; j > cur; --j)
+                    callstr[j] = callstr[j - 1];
+                callstr[cur] = (char)ch;
+                ++len;
+                ++cur;
                 callstr[len] = 0;
             }
             //else
                 //printf("this: %d\n", ch);
+            if (infolen + oldcur >= termWidth)
+                printf("\033[%dA", (infolen + oldcur)/termWidth);
             printf("\r");
-            if (oldlen > termWidth)
-                printf("\033[%dF", oldlen/termWidth);
-            for (i = 0; i < oldlen; ++i)
+            for (i = 0; i < oldlen + infolen; ++i)
                 printf(" ");
-            if (oldlen > termWidth)
-                printf("\033[%dF", oldlen/termWidth);
+            if (oldlen + infolen - 1 >= termWidth)
+                printf("\033[%dA", (oldlen + infolen - 1)/termWidth);
             printf("\r[\033[32m%s\033[0m]:%s> %s", getenv("USER"), path, callstr);
-            oldlen = strlen(getenv("USER")) + strlen(path) + 5;
-            if (oldlen + len > termWidth)
-                printf("\033[%dF", (oldlen + len)/termWidth);
-            if (oldlen + cur > termWidth)
-                printf("\033[%dE", (oldlen + cur)/termWidth);
-            printf("\r\033[%dC", (oldlen + cur)%termWidth);
+            if (infolen + len - 1 >= termWidth)
+                printf("\033[%dA", (infolen + len - 1)/termWidth);
+            if (infolen + cur >= termWidth)
+                printf("\033[%dB", (infolen + cur)/termWidth);
+            if ((infolen + len)%termWidth == 0 && cur == len)
+                printf("\r\033[%dC\n", termWidth); //new str!
+            printf("\r");
+            if ((infolen + cur)%termWidth > 0)
+                printf("\033[%dC", (infolen + cur)%termWidth);
             fflush(stdout);
             ch = mygch();
         }
@@ -290,7 +313,7 @@ int main(int argc, char **argv)
             newhist[newhistCount][0] = 0;
         histPos = oldhistCount + newhistCount;
 
-        oneStrCall(callstr, &path);
+        oneStrCall(callstr, path, jobs);
     }
     /*void *tmp = NULL;
     wait(tmp);

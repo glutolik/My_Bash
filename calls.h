@@ -12,8 +12,8 @@
 
 int oneProgPars(char*** output, const char* callstr);
 
-int oneStrCall(const char* callstr, char** path);
+int oneStrCall(const char* callstr, char* path, JobsList* jobs);
 
-int scriptRunner(int infd, int outfd, char* name, char** argv);
+int scriptRunner(char** argv);
 
 #endif // CALLS_H_INCLUDED
