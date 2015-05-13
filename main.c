@@ -7,6 +7,7 @@
 #include <errno.h>
 #include <dirent.h>
 #include <fcntl.h>
+#include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -24,7 +25,7 @@ int mygch()
     struct termios tty, savetty;
     tcgetattr(0, &tty);
 	savetty = tty;
-	tty.c_lflag &= ~(ISIG | ICANON | ECHO);
+	tty.c_lflag &= ~(ICANON | ECHO);
 	tty.c_cc[VMIN] = 1;
 	tcsetattr(0, TCSAFLUSH, &tty);
     int ch;
@@ -32,6 +33,7 @@ int mygch()
 	tcsetattr(0, TCSANOW, &savetty);
 	return ch;
 }
+
 
 int maxCallLen = 512;
 
@@ -192,6 +194,9 @@ int main(int argc, char **argv)
     int oldhistCount = loadHistory(&oldhist);
     int newhistCount = 0;
     int histPos = oldhistCount;
+    struct winsize ws;
+    ioctl(1, TIOCGWINSZ, &ws);
+    int termWidth = ws.ws_col;
 
     while (1)
     {
@@ -204,19 +209,14 @@ int main(int argc, char **argv)
         while ((char)ch != '\n' && (char)ch != EOF)
         {
             int i;
+            int oldlen = len + strlen(getenv("USER")) + strlen(path) + 5;
             if ((char)ch == 127) //backspace
             {
                 --len;
                 if (len < 0)
-                {
                     len = 0;
-                }
                 else
-                {
                     callstr[len] = 0;
-                    printf("\b \b");
-                    fflush(stdout);
-                }
             }
             else if (ch == 4283163) //я не пьян, это стрелка вверх
             {
@@ -225,17 +225,11 @@ int main(int argc, char **argv)
                 --histPos;
                 if (histPos < 0)
                     histPos = 0;
-                printf("\r");
-                int lastlen = strlen(getenv("USER")) + strlen(callstr) + strlen(path) + 5;
-                for (i = 0; i < lastlen; ++i)
-                    printf(" ");
                 if (histPos < oldhistCount)
                     strcpy(callstr, oldhist[histPos]);
                 else
                     strcpy(callstr, newhist[histPos - oldhistCount]);
                 len = strlen(callstr);
-                printf("\r[\033[32m%s\033[0m]:%s> %s", getenv("USER"), path, callstr);
-                fflush(stdout);
                 //printf("\nog %d/(%d + %d): %s\n", histPos, oldhistCount, newhistCount, callstr);
             }
             else if (ch == 4348699) //and down
@@ -243,25 +237,19 @@ int main(int argc, char **argv)
                 ++histPos;
                 if (histPos > oldhistCount + newhistCount)
                     histPos = oldhistCount + newhistCount;
-                printf("\r");
-                int lastlen = strlen(getenv("USER")) + strlen(callstr) + strlen(path) + 5;
-                for (i = 0; i < lastlen; ++i)
-                    printf(" ");
                 if (histPos < oldhistCount)
                     strcpy(callstr, oldhist[histPos]);
                 else
                     strcpy(callstr, newhist[histPos - oldhistCount]);
                 len = strlen(callstr);
-                printf("\r[\033[32m%s\033[0m]:%s> %s", getenv("USER"), path, callstr);
-                fflush(stdout);
                 //printf("\nog %d/(%d + %d): %s\n", histPos, oldhistCount, newhistCount, callstr);
             }
             else if (len < maxCallLen && (char)ch >= ' ')
             {
                 i = 0;
-                printf("%c", ch);
-                fflush(stdout);
-                while (i < 4) //for Unicode multichar coding
+                //printf("%c", ch);
+                //fflush(stdout);
+                while (i < 4) //for Unicode multichar coding (now it is not availiable)
                 {
                     char nch = *((char*)(&ch) + i);
                     if ((nch >= ' ' && nch < 127) || (nch < 0))
@@ -276,13 +264,24 @@ int main(int argc, char **argv)
             }
             //else
                // printf("this: %d\n", ch);
+            printf("\r");
+            if (oldlen > termWidth)
+                printf("\033[%dF", oldlen/termWidth);
+            for (i = 0; i < oldlen; ++i)
+                printf(" ");
+            if (oldlen > termWidth)
+                printf("\033[%dF", oldlen/termWidth);
+            printf("\r[\033[32m%s\033[0m]:%s> %s", getenv("USER"), path, callstr);
+            fflush(stdout);
             ch = mygch();
         }
         callstr[len] = 0;
         printf("\n");
         if (len < 1)
             continue;
-        if (newhistCount == 0 || strcmp(newhist[newhistCount - 1], callstr) != 0)
+        if ((oldhistCount == 0 && newhistCount == 0) ||
+                (newhistCount == 0 && strcmp(oldhist[oldhistCount - 1], callstr) != 0) ||
+                (newhistCount != 0 && strcmp(newhist[newhistCount - 1], callstr) != 0))
         {
             strcpy(newhist[newhistCount], callstr);
             ++newhistCount;
