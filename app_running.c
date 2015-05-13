@@ -71,11 +71,6 @@ int run_application(int d_in, int d_out, int d_err, const char* app_name, char *
 			exit(EXIT_FAILURE);
 		}
 	}
-  //если запуск неудачен
-	if (*exec_return_code == EXIT_FAILURE)
-	{
-		return -1;
-	}
   //если запуск в фоне, то добавляем задание
     if (jobs != NULL)
     {
@@ -89,6 +84,11 @@ int run_application(int d_in, int d_out, int d_err, const char* app_name, char *
     {
 		int exit_status;
 		wait(&exit_status);
+	  //если запуск неудачен
+		if (*exec_return_code == EXIT_FAILURE)
+		{
+			return -1;
+		}
 	  //если запуск неудачен
 		if (!WIFEXITED(exit_status))
 		{

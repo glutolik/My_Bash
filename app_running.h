@@ -1,3 +1,6 @@
+#ifndef APP_RUNNING
+#define APP_RUNNING
+
 #include <unistd.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -41,3 +44,4 @@ void delete_fake_discriptor(int* fd);
 int signal_process(JobsList* jobs, size_t job_number, int signal_to_send);
 int stop_process(JobsList* jobs, size_t job_number);
 int continue_process(JobsList* jobs, size_t job_number);
+#endif
