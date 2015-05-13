@@ -3,7 +3,40 @@
 const int IS_FIRST = 1;
 const int IS_NOT_FIRST = 0;
 
-int run_application(int d_in, int d_out, int d_err, const char* app_name, char *const argv[], int* returned_code)
+const char* PROCESS_STATUS_TITLE[] = {"unknown", "terminated", "stoped", "signaled", "no change", "running"};
+//process status
+const int PS_UNKNOWN = 0;
+const int PS_EXITED = 1;
+const int PS_STOPED = 2;
+const int PS_SIGNALED = 3;
+const int PS_NOTHING = 4;
+const int PS_RUNNING = 5;
+
+char* generate_process_title(char *const argv[])
+{
+	char** arg_ptr = argv;
+	size_t total_length = strlen(argv[0]);
+	while (*arg_ptr != NULL)
+	{
+		total_length += 1 + strlen(*arg_ptr);
+		++arg_ptr;
+	}
+	char* comand = (char*) malloc(total_length);
+	total_length = 0;
+	arg_ptr = argv;
+	while (*arg_ptr != NULL)
+	{
+		//total_length += 1;//strlen(*arg_ptr);
+		sprintf(comand + total_length, "%s \n", *arg_ptr);
+		total_length += strlen(*arg_ptr) + 1;
+		++arg_ptr;
+	}
+	comand[total_length - 1] = '\0';
+	return comand;
+}
+
+int run_application(int d_in, int d_out, int d_err, const char* app_name, char *const argv[], 
+	int* returned_code, JobsList* jobs)
 {
 	int shm = shm_open("/exec_return", O_RDWR | O_CREAT, 0666);
 	if (shm == -1)
@@ -38,17 +71,33 @@ int run_application(int d_in, int d_out, int d_err, const char* app_name, char *
 			exit(EXIT_FAILURE);
 		}
 	}
-  //получаем код возврата	
-	int exit_status;
-	wait(&exit_status);
   //если запуск неудачен
-	if (*exec_return_code == EXIT_FAILURE || !WIFEXITED(exit_status))
+	if (*exec_return_code == EXIT_FAILURE)
 	{
 		return -1;
-	}	
-	if (returned_code != NULL)
-	{
-		*returned_code = WEXITSTATUS(exit_status);
+	}
+  //если запуск в фоне, то добавляем задание
+    if (jobs != NULL)
+    {
+    	printf("Job added\n");	
+    	char* comand = generate_process_title(argv);
+		add_job(jobs, exec_child, comand);
+		show_jobs;
+    }
+    else
+  //иначе ждем завершения и получаем код возврата	
+    {
+		int exit_status;
+		wait(&exit_status);
+	  //если запуск неудачен
+		if (!WIFEXITED(exit_status))
+		{
+			return -1;
+		}	
+		if (returned_code != NULL)
+		{
+			*returned_code = WEXITSTATUS(exit_status);
+		}
 	}
 	return 0;
 }
@@ -73,7 +122,7 @@ int bind_two_apps(int first, int input_fd, int output_fd, const char* app_name, 
 		write_fd = output_fd;
 		read_fd = -1;
 	}
-	if (run_application(input_fd, write_fd, 2, app_name, argv, NULL) == -1)
+	if (run_application(input_fd, write_fd, 2, app_name, argv, NULL, NULL) == -1)
 	{
 		return -2;
 	}
@@ -114,4 +163,128 @@ int run_comand_chain(int d_in, int d_out, int d_err, int comand_count,
 		}
 	}
 	return 0;
+}
+
+JobsList* init_jobs_system(size_t new_size)
+{
+	JobsList* new_jobs_list = (JobsList*) malloc(sizeof(JobsList));
+	new_jobs_list->list_size = new_size;
+	new_jobs_list->jobs_count = 0;
+	new_jobs_list->jobs_list_ptr = (JobStruct*) malloc(sizeof(JobStruct) * new_size);
+	return new_jobs_list;
+}
+
+void delete_jobs_system(JobsList* jobs)
+{
+	if (jobs == NULL)
+	{
+		return;
+	}
+	for (size_t i = 0; i < jobs->jobs_count; ++i)
+	{
+		free(jobs->jobs_list_ptr[i].comand_str);
+	}
+	free(jobs->jobs_list_ptr);
+	free(jobs);
+}
+
+void add_job(JobsList* jobs, pid_t new_pid, char* name)
+{
+	jobs->jobs_list_ptr[jobs->jobs_count].pid = new_pid;
+	jobs->jobs_list_ptr[jobs->jobs_count].status = PS_RUNNING;
+	jobs->jobs_list_ptr[jobs->jobs_count].comand_str = name;
+	jobs->jobs_count++;
+}
+
+int update_process_status(JobStruct* job)
+{
+	//kill(job->pid, SIGSTOP);
+	int process_info;
+	int wait_code = waitpid(job->pid, &process_info, WNOHANG | WUNTRACED | WCONTINUED);
+	if (wait_code == -1)
+	{
+		return -1;
+	}
+	if (wait_code == job->pid)
+	{
+		if (WIFEXITED(process_info))
+		{
+			job->status = PS_EXITED;
+		}
+		if (WIFSTOPPED(process_info))
+		{
+			job->status = PS_STOPED;
+		}
+		if (WIFSIGNALED(process_info))
+		{
+			//printf("term sig = %d\n", WTERMSIG(process_info));
+			job->status = PS_SIGNALED;
+		}
+		if (WIFCONTINUED(process_info))
+		{
+			job->status = PS_RUNNING;
+		}
+	}
+	return 0;
+}
+
+void show_jobs(JobsList* jobs)
+{
+	printf("Jobs:\n");
+	for (size_t i = 0; i < jobs->jobs_count; ++i)
+	{
+		if (update_process_status(&(jobs->jobs_list_ptr[i])) == -1)
+		{
+			continue;
+		}
+		printf("[%d] %d %s (%s)\n", i, jobs->jobs_list_ptr[i].pid, 
+			PROCESS_STATUS_TITLE[jobs->jobs_list_ptr[i].status], jobs->jobs_list_ptr[i].comand_str);
+	}
+}
+
+int* create_fake_discriptor(void)
+{
+	int* new_fd = (int*) malloc(2 * sizeof(int));
+	pipe(new_fd);
+	return new_fd;
+}
+
+void delete_fake_discriptor(int* fd)
+{
+	close(fd[0]);
+	close(fd[1]);
+	free(fd);
+}
+
+int signal_process(JobsList* jobs, size_t job_number, int signal_to_send)
+{
+	if (job_number < jobs->jobs_count)
+	{
+		kill(jobs->jobs_list_ptr[job_number].pid, signal_to_send);
+		return 0;
+	}
+	else
+	{
+		return -1;
+	}
+}
+
+int stop_process(JobsList* jobs, size_t job_number)
+{
+	if (signal_process(jobs, job_number, SIGSTOP) == 0)
+	{
+		printf("Process stoped: %s\n", jobs->jobs_list_ptr[job_number].comand_str);
+		return 0;
+	}
+	return -1;
+}
+
+int continue_process(JobsList* jobs, size_t job_number)
+{
+	if (signal_process(jobs, job_number, SIGCONT) == 0)
+	{
+		printf("Process continued: %s\n", jobs->jobs_list_ptr[job_number].comand_str);
+		return 0;
+	}
+	return -1;
 }
