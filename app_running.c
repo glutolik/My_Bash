@@ -3,7 +3,7 @@
 const int IS_FIRST = 1;
 const int IS_NOT_FIRST = 0;
 
-const char* PROCESS_STATUS_TITLE[] = {"unknown", "terminated", "stoped", "signaled", "no change", "running"};
+const char* PROCESS_STATUS_TITLE[] = {"unknown", "terminated", "stopped", "signaled", "no change", "running"};
 //process status
 const int PS_UNKNOWN = 0;
 const int PS_EXITED = 1;
@@ -71,34 +71,6 @@ int run_application(int d_in, int d_out, int d_err, const char* app_name, char *
 			exit(EXIT_FAILURE);
 		}
 	}
-  //если запуск в фоне, то добавляем задание
-    if (jobs != NULL)
-    {
-    	printf("Job added\n");	
-    	char* comand = generate_process_title(argv);
-		add_job(jobs, exec_child, comand);
-		show_jobs;
-    }
-    else
-  //иначе ждем завершения и получаем код возврата	
-    {
-		int exit_status;
-		wait(&exit_status);
-	  //если запуск неудачен
-		if (*exec_return_code == EXIT_FAILURE)
-		{
-			return -1;
-		}
-	  //если запуск неудачен
-		if (!WIFEXITED(exit_status))
-		{
-			return -1;
-		}	
-		if (returned_code != NULL)
-		{
-			*returned_code = WEXITSTATUS(exit_status);
-		}
-	}
 	return 0;
 }
 
@@ -140,26 +112,53 @@ int bind_two_apps(int first, int input_fd, int output_fd, const char* app_name, 
 }
 
 int run_comand_chain(int d_in, int d_out, int d_err, int comand_count, 
-	const char** apps_names, char** apps_args[], int* returned_code)
+	const char** apps_names, char** apps_args[], int* returned_code, JobsList* jobs)
 {
 	int next;
-	for(size_t i = 0; i < comand_count; ++i)
+	pid_t run_child = fork();
+	if (run_child == -1)
 	{
-	  //если команда последняя, то писать в d_out, иначе в соединяющий пайп	
-		int current_out = (i + 1 == comand_count)? d_out : -1;
-	  //если команда первая, то читать из d_in	
-		if (i == 0)
+		return -1;
+	}
+	if (run_child == 0)
+	{
+		for(size_t i = 0; i < comand_count; ++i)
 		{
-			next = bind_two_apps(IS_FIRST, d_in, current_out, apps_names[i], apps_args[i]);
+		  //если команда последняя, то писать в d_out, иначе в соединяющий пайп	
+			int current_out = (i + 1 == comand_count)? d_out : -1;
+		  //если команда первая, то читать из d_in	
+			if (i == 0)
+			{
+				next = bind_two_apps(IS_FIRST, d_in, current_out, apps_names[i], apps_args[i]);
+			}
+		  //иначе из соединительного пайпа	
+			else
+			{
+				next = bind_two_apps(IS_NOT_FIRST, next, current_out, apps_names[i], apps_args[i]);	
+			}
+			if (next == -2)
+			{
+				exit(EXIT_FAILURE);
+			}
 		}
-	  //иначе из соединительного пайпа	
+		
+		for (size_t i = 0; i < comand_count; ++i)
+		{
+			wait(NULL);
+		}
+		exit(EXIT_SUCCESS);
+	}
+	else
+	{
+		if (jobs != NULL)
+		{
+			char* comand = generate_process_title(apps_args[0]);
+			printf("Job added\n");
+			add_job(jobs, run_child, comand);
+		}
 		else
 		{
-			next = bind_two_apps(IS_NOT_FIRST, next, current_out, apps_names[i], apps_args[i]);	
-		}
-		if (next == -2)
-		{
-			return -1;
+			waitpid(run_child, NULL, 0);
 		}
 	}
 	return 0;
@@ -230,7 +229,7 @@ int update_process_status(JobStruct* job)
 
 void show_jobs(JobsList* jobs)
 {
-	printf("Jobs:\n");
+	printf("Jobs(%d)[%p]\n", jobs->jobs_count, jobs);
 	for (size_t i = 0; i < jobs->jobs_count; ++i)
 	{
 		if (update_process_status(&(jobs->jobs_list_ptr[i])) == -1)
