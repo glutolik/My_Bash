@@ -118,6 +118,13 @@ int run_comand_chain(int d_in, int d_out, int d_err, int comand_count,
 	const char** apps_names, char** apps_args[], int* returned_code, JobsList* jobs)
 {
 	int next;
+	int real_in = d_in;
+	int* fake_fd;
+	if (jobs != NULL)
+	{
+		fake_fd = create_fake_discriptor();
+		real_in = dup(fake_fd[0]);
+	}
 	pid_t run_child = fork();
 	if (run_child == -1)
 	{
@@ -132,7 +139,7 @@ int run_comand_chain(int d_in, int d_out, int d_err, int comand_count,
 		  //если команда первая, то читать из d_in	
 			if (i == 0)
 			{
-				next = bind_two_apps(IS_FIRST, d_in, current_out, apps_names[i], apps_args[i]);
+				next = bind_two_apps(IS_FIRST, real_in, current_out, apps_names[i], apps_args[i]);
 			}
 		  //иначе из соединительного пайпа	
 			else
@@ -157,7 +164,7 @@ int run_comand_chain(int d_in, int d_out, int d_err, int comand_count,
 		{
 			char* comand = generate_process_title(apps_args[0]);
 			printf("Job added\n");
-			add_job(jobs, run_child, comand);
+			add_job(jobs, run_child, comand, fake_fd, real_in);
 		}
 		else
 		{
@@ -190,13 +197,13 @@ void delete_jobs_system(JobsList* jobs)
 	free(jobs);
 }
 
-void add_job(JobsList* jobs, pid_t new_pid, char* name)
+void add_job(JobsList* jobs, pid_t new_pid, char* name, int* real_fake_fd, int new_current_in)
 {
 	jobs->jobs_list_ptr[jobs->jobs_count].pid = new_pid;
 	jobs->jobs_list_ptr[jobs->jobs_count].status = PS_RUNNING;
 	jobs->jobs_list_ptr[jobs->jobs_count].comand_str = name;
-	jobs->jobs_list_ptr[jobs->jobs_count].fake_fd = create_fake_discriptor();
-	jobs->jobs_list_ptr[jobs->jobs_count].current_input = dup(jobs->jobs_list_ptr[jobs->jobs_count].fake_fd[0]);
+	jobs->jobs_list_ptr[jobs->jobs_count].fake_fd = real_fake_fd;
+	jobs->jobs_list_ptr[jobs->jobs_count].current_input = new_current_in;
 	jobs->jobs_count++;
 }
 

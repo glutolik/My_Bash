@@ -40,7 +40,7 @@ int run_comand_chain(int d_in, int d_out, int d_err, int comand_count,
 
 JobsList* init_jobs_system(size_t new_size);
 void delete_jobs_system(JobsList* jobs);
-void add_job(JobsList* jobs, pid_t new_pid, char* name);
+void add_job(JobsList* jobs, pid_t new_pid, char* name, int* real_fake_fd, int new_current_in);
 void show_jobs(JobsList* jobs);
 int* create_fake_discriptor(void);
 void delete_fake_discriptor(int* fd);
