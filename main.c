@@ -13,6 +13,7 @@
 #include <sys/stat.h>
 #include <signal.h>
 #include <termios.h>
+#include <pthread.h>
 #include "app_running.h"
 #include "calls.h"
 
@@ -31,7 +32,8 @@ int mygch()
 	tty.c_cc[VMIN] = 1;
 	tcsetattr(0, TCSAFLUSH, &tty);
     int ch;
-	read(0, &ch, sizeof(int));
+	if (read(0, &ch, sizeof(int)) < 0)
+        ch = EOF;
 	tcsetattr(0, TCSANOW, &savetty);
 	return ch;
 }
@@ -55,6 +57,12 @@ int lastSig = 0;
 void sigcc()
 {
     lastSig = 2;
+}
+void listenerTerm()
+{
+    lastSig = -1;
+    char foreof = 5;
+    write(0, &foreof, sizeof(char));
 }
 
 extern int maxCallLen;
@@ -130,6 +138,8 @@ int main(int argc, char **argv)
         printf("script terminated with code %d.\n", code);
         return code;
     }
+    int outpipe[2];
+    pipe(outpipe);
     signal(SIGINT, sigcc);
     char callstr[maxCallLen];
     char file_addr[256];
@@ -160,177 +170,198 @@ int main(int argc, char **argv)
 
     while (1)
     {
-        printf("[\033[32m%s\033[0m]:%s> ", getenv("USER"), path);
-        fflush(stdout);
-        i = 0;
-        int len = 0;
-        int cur = 0;
-        callstr[0] = 0;
-        int infolen = strlen(getenv("USER")) + strlen(path) + 5;
-        int ch = mygch();
-        while ((char)ch != '\n' && (char)ch != EOF) //reading and mdifying callstr
+        if (1)//get_active_pid(jobs) == 0)
         {
-            int i;
-            int oldlen = len;
-            int oldcur = cur;
-            if ((char)ch == 127) //backspace
+            printf("[\033[32m%s\033[0m]:%s> ", getenv("USER"), path);
+            fflush(stdout);
+            i = 0;
+            int len = 0;
+            int cur = 0;
+            callstr[0] = 0;
+            int infolen = strlen(getenv("USER")) + strlen(path) + 5;
+            int ch;
+            //read(0, &ch, 1);
+            ch = mygch();
+            while ((char)ch != '\n' && (char)ch != EOF) //reading and mdifying callstr
             {
-                --len;
-                --cur;
-                if (len < 0 || cur < 0)
+                int i;
+                int oldlen = len;
+                int oldcur = cur;
+                if ((char)ch == 127) //backspace
                 {
-                    len = 0;
+                    --len;
+                    --cur;
+                    if (len < 0 || cur < 0)
+                    {
+                        len = 0;
+                        cur = 0;
+                    }
+                    else
+                    {
+                        for (i = cur; i <= len; ++i)
+                            callstr[i] = callstr[i + 1];
+                    }
+                }
+                else if (ch == 2117294875) //delete
+                {
+                    if (cur < len)
+                    {
+                        for (i = cur; i < len; ++i)
+                            callstr[i] = callstr[i + 1];
+                        --len;
+                    }
+                }
+                else if (ch == 4283163 || ch == -1220453605) //я не пьян, это стрелка вверх.
+                                                            //Два числа - это системонезависимость (почти) - x32 и x64
+                {
+                    if (histPos == oldhistCount + newhistCount)
+                        strcpy(newhist[histPos - oldhistCount], callstr);
+                    --histPos;
+                    if (histPos < 0)
+                        histPos = 0;
+                    if (histPos < oldhistCount)
+                        strcpy(callstr, oldhist[histPos]);
+                    else
+                        strcpy(callstr, newhist[histPos - oldhistCount]);
+                    len = strlen(callstr);
+                    cur = len;
+                }
+                else if (ch == 4348699 || ch == -1220388069) //and down
+                {
+                    ++histPos;
+                    if (histPos > oldhistCount + newhistCount)
+                        histPos = oldhistCount + newhistCount;
+                    if (histPos < oldhistCount)
+                        strcpy(callstr, oldhist[histPos]);
+                    else
+                        strcpy(callstr, newhist[histPos - oldhistCount]);
+                    len = strlen(callstr);
+                    cur = len;
+                }
+                else if (ch == 4479771 || ch == -1220256997) //left
+                {
+                    if (cur > 0)
+                        --cur;
+                }
+                else if (ch == 4414235 || ch == -1220322533) //right
+                {
+                    if (cur < len)
+                        ++cur;
+                }
+                else if (ch == 4741915 || ch == 2117163803) //home (fn + left)
+                {
                     cur = 0;
                 }
-                else
+                else if (ch == 4610843 || ch == 2117360411) //end (fn + right)
                 {
-                    for (i = cur; i <= len; ++i)
-                        callstr[i] = callstr[i + 1];
+                    cur = len;
                 }
-            }
-            else if (ch == 2117294875) //delete
-            {
-                if (cur < len)
+                else if ((char)ch == '\t') //tab, ch == 32521 on x64
                 {
-                    for (i = cur; i < len; ++i)
-                        callstr[i] = callstr[i + 1];
-                    --len;
+                    //autofilling
                 }
-            }
-            else if (ch == 4283163 || ch == -1220453605) //я не пьян, это стрелка вверх.
-                                                        //Два числа - это системонезависимость (почти) - x32 и x64
-            {
-                if (histPos == oldhistCount + newhistCount)
-                    strcpy(newhist[histPos - oldhistCount], callstr);
-                --histPos;
-                if (histPos < 0)
-                    histPos = 0;
-                if (histPos < oldhistCount)
-                    strcpy(callstr, oldhist[histPos]);
-                else
-                    strcpy(callstr, newhist[histPos - oldhistCount]);
-                len = strlen(callstr);
-                cur = len;
-            }
-            else if (ch == 4348699 || ch == -1220388069) //and down
-            {
-                ++histPos;
-                if (histPos > oldhistCount + newhistCount)
-                    histPos = oldhistCount + newhistCount;
-                if (histPos < oldhistCount)
-                    strcpy(callstr, oldhist[histPos]);
-                else
-                    strcpy(callstr, newhist[histPos - oldhistCount]);
-                len = strlen(callstr);
-                cur = len;
-            }
-            else if (ch == 4479771 || ch == -1220256997) //left
-            {
-                if (cur > 0)
-                    --cur;
-            }
-            else if (ch == 4414235 || ch == -1220322533) //right
-            {
-                if (cur < len)
-                    ++cur;
-            }
-            else if (ch == 4741915 || ch == 2117163803) //home (fn + left)
-            {
-                cur = 0;
-            }
-            else if (ch == 4610843 || ch == 2117360411) //end (fn + right)
-            {
-                cur = len;
-            }
-            else if ((char)ch == '\t') //tab, ch == 32521 on x64
-            {
-                //autofilling
-            }
-            else if (len < maxCallLen - 4 && (char)ch >= ' ')
-            {
-                i = 0;
-                //printf("%c", ch);
-                //fflush(stdout);
-                /*while (i < 4) //for Unicode multichar coding (now it is not availiable)
+                else if (len < maxCallLen - 4 && (char)ch >= ' ')
                 {
-                    char nch = *((char*)(&ch) + i);
-                    if ((nch >= ' ' && nch < 127) || (nch < 0))
+                    i = 0;
+                    //printf("%c", ch);
+                    //fflush(stdout);
+                    /*while (i < 4) //for Unicode multichar coding (now it is not availiable)
                     {
-                        int j = len;
-                        for (j = len; j > cur; --j)
-                            callstr[j] = callstr[j - 1];
-                        callstr[cur] = nch;
-                        ++len;
-                        ++cur;
-                    }
-                    ++i;
-                }*/
-                int j = len;
-                for (j = len; j > cur; --j)
-                    callstr[j] = callstr[j - 1];
-                callstr[cur] = (char)ch;
-                ++len;
-                ++cur;
-                callstr[len] = 0;
-            }
-            //else
-                //printf("this: %d\n", ch);
-            if (infolen + oldcur >= termWidth)
-                printf("\033[%dA", (infolen + oldcur)/termWidth);
-            printf("\r");
-            for (i = 0; i < oldlen + infolen; ++i)
-                printf(" ");
-            if (oldlen + infolen - 1 >= termWidth)
-                printf("\033[%dA", (oldlen + infolen - 1)/termWidth);
-            printf("\r[\033[32m%s\033[0m]:%s> %s", getenv("USER"), path, callstr);
-            if (infolen + len - 1 >= termWidth)
-                printf("\033[%dA", (infolen + len - 1)/termWidth);
-            if (infolen + cur >= termWidth)
-                printf("\033[%dB", (infolen + cur)/termWidth);
-            if ((infolen + len)%termWidth == 0 && cur == len)
-                printf("\r\033[%dC\n", termWidth); //new str!
-            printf("\r");
-            if ((infolen + cur)%termWidth > 0)
-                printf("\033[%dC", (infolen + cur)%termWidth);
-            fflush(stdout);
-            ch = mygch();
-        }
-        callstr[len] = 0;
-        printf("\n");
-        if (code == EOF || strcmp(callstr, "exit") == 0) //и аналогично для всех внутренних команд
-        {
-            int i = 0;
-            printf("\n");
-            appendHistory(newhist, newhistCount);
-            for (i = 0; i < 6; ++i)
-            {
-                printf("\033[%dm*\033[0m", 31 + i);
+                        char nch = *((char*)(&ch) + i);
+                        if ((nch >= ' ' && nch < 127) || (nch < 0))
+                        {
+                            int j = len;
+                            for (j = len; j > cur; --j)
+                                callstr[j] = callstr[j - 1];
+                            callstr[cur] = nch;
+                            ++len;
+                            ++cur;
+                        }
+                        ++i;
+                    }*/
+                    int j = len;
+                    for (j = len; j > cur; --j)
+                        callstr[j] = callstr[j - 1];
+                    callstr[cur] = (char)ch;
+                    ++len;
+                    ++cur;
+                    callstr[len] = 0;
+                }
+                //else
+                    //printf("this: %d\n", ch);
+                if (infolen + oldcur >= termWidth)
+                    printf("\033[%dA", (infolen + oldcur)/termWidth);
+                printf("\r");
+                for (i = 0; i < oldlen + infolen; ++i)
+                    printf(" ");
+                if (oldlen + infolen - 1 >= termWidth)
+                    printf("\033[%dA", (oldlen + infolen - 1)/termWidth);
+                printf("\r[\033[32m%s\033[0m]:%s> %s", getenv("USER"), path, callstr);
+                if (infolen + len - 1 >= termWidth)
+                    printf("\033[%dA", (infolen + len - 1)/termWidth);
+                if (infolen + cur >= termWidth)
+                    printf("\033[%dB", (infolen + cur)/termWidth);
+                if ((infolen + len)%termWidth == 0 && cur == len)
+                    printf("\r\033[%dC\n", termWidth); //new str!
+                printf("\r");
+                if ((infolen + cur)%termWidth > 0)
+                    printf("\033[%dC", (infolen + cur)%termWidth);
                 fflush(stdout);
+                //read(0, &ch, 1);
+                ch = mygch();
             }
-            printf("\nGoodbye.\n");
-            return 0;
-        }
-        if (len < 1)
-            continue;
-        if ((oldhistCount == 0 && newhistCount == 0) ||
-                (newhistCount == 0 && strcmp(oldhist[oldhistCount - 1], callstr) != 0) ||
-                (newhistCount != 0 && strcmp(newhist[newhistCount - 1], callstr) != 0))
-        {
-            strcpy(newhist[newhistCount], callstr);
-            ++newhistCount;
-            if (newhistCount == 500)
+            callstr[len] = 0;
+            printf("\n");
+            if (code == EOF || strcmp(callstr, "exit") == 0) //и аналогично для всех внутренних команд
             {
+                int i = 0;
+                printf("\n");
                 appendHistory(newhist, newhistCount);
-                oldhistCount = loadHistory(&oldhist);
-                newhistCount = 0;
-                histPos = oldhistCount;
+                for (i = 0; i < 6; ++i)
+                {
+                    printf("\033[%dm*\033[0m", 31 + i);
+                    fflush(stdout);
+                }
+                printf("\nGoodbye.\n");
+                return 0;
             }
-        }
-        else if (newhistCount > 0)
-            newhist[newhistCount][0] = 0;
-        histPos = oldhistCount + newhistCount;
+            if (len < 1)
+                continue;
+            if ((oldhistCount == 0 && newhistCount == 0) ||
+                    (newhistCount == 0 && strcmp(oldhist[oldhistCount - 1], callstr) != 0) ||
+                    (newhistCount != 0 && strcmp(newhist[newhistCount - 1], callstr) != 0))
+            {
+                strcpy(newhist[newhistCount], callstr);
+                ++newhistCount;
+                if (newhistCount == 500)
+                {
+                    appendHistory(newhist, newhistCount);
+                    oldhistCount = loadHistory(&oldhist);
+                    newhistCount = 0;
+                    histPos = oldhistCount;
+                }
+            }
+            else if (newhistCount > 0)
+                newhist[newhistCount][0] = 0;
+            histPos = oldhistCount + newhistCount;
 
-        oneStrCall(callstr, path, jobs);
+            oneStrCall(callstr, path, jobs, outpipe[0]);
+        }
+        else
+        {
+            char ch = mygch();
+            if (ch == EOF)
+            {
+                break;
+            }
+            else if (ch == 5)
+            {
+                fprintf(stderr, "uehueueuuu!\n");
+                continue;
+            }
+            else
+                write(outpipe[1], &ch, sizeof(char));
+        }
     }
     /*void *tmp = NULL;
     wait(tmp);

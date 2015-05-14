@@ -45,7 +45,7 @@ int getword(const char* stream, char* output)
 }
 int progSepar(char ch)
 {
-    if (ch != '|' && ch != '&' && ch != 0 && ch != '(' && ch != ')' && ch != '>')
+    if (ch != '|' && ch != '&' && ch != 0 && ch != '(' && ch != ')' && ch != '>' && ch != '<')
         return -1;
     else
         return 0;
@@ -142,14 +142,170 @@ int oneProgPars(char*** output, const char* callstr)
     }
     return argc;
 }
-
-int oneStrCall(const char* callstr, char* path, JobsList* jobs)
+int parsBrakesBody(char* callstr, int* iflen)
 {
+    int niflen = 0;
+    int start = 0;
+    int brsum = 1;
+    while (callstr[start] != '(')
+        ++start;
+    while (callstr[start + niflen] != 0 && brsum != 0)
+    {
+        ++niflen;
+        if (callstr[start + niflen] == '(')
+            ++brsum;
+        else if (callstr[start + niflen] == ')')
+            --brsum;
+    }
+    if (callstr[start + niflen] == 0)
+        return 0;
+    ++niflen;
+    if (iflen != NULL)
+        *iflen = start + niflen;
+    //printf("%d\n", parsBrakes(callstr, iflen));
+    return parsBrakes(callstr + start, niflen);
+}
+
+int parsBrakes(char* callstr, int len)
+{
+    int i = 0;
+    int brsum = 0;
+    int brsummin = 0;
+    if (len == -1)
+        len = strlen(callstr);
+    int beg = 0;
+    int end = len - 1;
+    while (callstr[beg] == ' ' || callstr[beg] == '(')
+    {
+        if (callstr[beg] == '(')
+            ++brsummin;
+        ++beg;
+    }
+    while (end > beg && (callstr[end] == ' ' || callstr[end] == ')'))
+        --end;
+    brsum = brsummin;
+    for (i = beg; i <= end; ++i)
+    {
+        if (callstr[i] == '(')
+            ++brsum;
+        else if (callstr[i] == ')')
+            --brsum;
+        if (brsum < brsummin)
+            brsummin = brsum;
+    }
+    beg = 0;
+    end = len - 1;
+    while (brsummin > 0)
+    {
+        while (callstr[beg] != '(')
+            ++beg;
+        ++beg;
+        while (callstr[end] != ')')
+            --end;
+        --end;
+        --brsummin;
+    }
+    ++end;
+    char priorityOper[] = {'|', '&', '=', '!', '<', '>', '+', '-', '*', '/'};
+    int prioritySize = 10;
+    int oper = 0;
+    for (oper = 0; oper < prioritySize; ++oper)
+    {
+        brsum = 0;
+        for (i = beg; i < end; ++i)
+        {
+            if (callstr[i] == '(')
+                ++brsum;
+            else if (callstr[i] == ')')
+                --brsum;
+            if (brsum == 0 && callstr[i] == priorityOper[oper])
+            {
+                int first = parsBrakes(callstr + beg, i - beg);
+                int second = parsBrakes(callstr + i + 1, end - i - 1);
+                //fprintf(stderr, "%d vs %d\n", first, second);
+                if (callstr[i] == '&')
+                    return first*second;
+                else if (callstr[i] == '|')
+                    return first + second;
+                else if (callstr[i] == '=')
+                {
+                    if (first == second)
+                        return 1;
+                    else
+                        return 0;
+                }
+                else if (callstr[i] == '!')
+                {
+                    if (first != second)
+                        return 1;
+                    else
+                        return 0;
+                }
+                else if (callstr[i] == '<')
+                {
+                    if (first < second)
+                        return 1;
+                    else
+                        return 0;
+                }
+                else if (callstr[i] == '>')
+                {
+                    if (first > second)
+                        return 1;
+                    else
+                        return 0;
+                }
+                else if (callstr[i] == '*')
+                    return first*second;
+                else if (callstr[i] == '/')
+                    return first/second;
+                else if (callstr[i] == '+')
+                    return first + second;
+                else if (callstr[i] == '-')
+                    return first - second;
+            }
+        }
+    }
+    int ret = 0;
+    int pos = beg;
+    char* oneword = callstr + beg;
+    while (callstr[pos] <= ' ')
+        ++pos;
+    if (callstr[pos] == '$')
+    {
+        i = pos + 1;
+        while (callstr[i] != 0 &&
+                ((callstr[i] >= 'a' && callstr[i] <= 'z') ||
+                 (callstr[i] >= 'A' && callstr[i] <= 'Z') ||
+                 (callstr[i] >= '0' && callstr[i] <= '9')))
+            ++i;
+        callstr[i] = 0;
+        oneword = getenv(callstr + pos + 1);
+        callstr[i] = ' ';
+    }
+    if (sscanf(oneword, "%d", &ret) == 1)
+        return ret;
+    pos = 1;
+    i = 0;
+    ret - 0;
+    while (oneword[i] != ' ' && oneword[i] != ' ')
+    {
+        ret = ret + oneword[i]*pos;
+        pos = pos * 255;
+        ++i;
+    }
+    return ret;
+}
+
+int oneStrCall(const char* callstr, char* path, JobsList* jobs, int pipeinfd)
+{
+    int i = 0;
+    while (callstr[i] <= ' ')
+        ++callstr;
     int len = strlen(callstr);
     if (len < 1)
         return 0;
     char comName[256];
-    int i = 0;
     while (callstr[i] > ' ')
         ++i;
     strncpy(comName, callstr, i);
@@ -250,6 +406,13 @@ int oneStrCall(const char* callstr, char* path, JobsList* jobs)
         char value[256];
         if (getword(callstr + 6, varname) != -1 && getword(callstr + 7 + strlen(varname) + 1, value) != -1)
         {
+            int i = 6 + strlen(varname) + 1;
+            while (callstr[i] == ' ' || callstr[i] == '=')
+                ++i;
+            if (callstr[i] == '(')
+            {
+                sprintf(value, "%d", parsBrakesBody(callstr + i - 1, NULL));
+            }
             if (value[0] == '$')
             {
                 char* repl = getenv(value + 1);
@@ -283,7 +446,7 @@ int oneStrCall(const char* callstr, char* path, JobsList* jobs)
         char** progNames = NULL;
         int progCount = 1;
         char* nextProg = callstr;
-        int infd = 0;
+        int infd = pipeinfd;
         int outfd = 1;
         JobsList* BGflag = NULL;
         while(callstr[i] != 0)
@@ -350,36 +513,72 @@ int oneStrCall(const char* callstr, char* path, JobsList* jobs)
     }
 }
 
-int parsOneBrakes(const char* callstr, char* oper, char* first, char* second)
+int scriptBlockRunner(const char* script, int size, JobsList* jobs, char* path)
 {
-    first[0] = 0;
-    second[0] = 0;
-    int pos = 0;
-    while (callstr[pos] != '(')
-        ++pos;
-    ++pos;
-    while (callstr[pos] == ' ')
-        ++pos;
-    while (callstr[pos] != ' ' && callstr[pos] != '=' && callstr[pos] != '!' && callstr[pos] != '<')
+    int i = 0;
+    while (i < size)
     {
-        strncat(first, callstr + pos, 1);
-        ++pos;
+        char callstr[maxCallLen];
+        char comName[32];
+        while (script[i] <= ' ')
+            ++i;
+        int j = i;
+        while (j < size && script[j] != '\n' && script[j] != 0 && (j >= size - 1 || script[j] != '/' || script[j + 1] != '/'))
+            ++j;
+        if (j >= size)
+            return 0;
+        strncpy(callstr, script + i, j - i);
+        callstr[j - i] = 0;
+        getword(callstr, comName);
+        if (strcmp(comName, "break") == 0)
+        {
+            int retcode = 0;
+            sscanf(callstr, "break%d", &retcode);
+            return retcode;
+        }
+        if (strcmp(comName, "if") == 0 || strcmp(comName, "while") == 0)
+        {
+            int iflen = i;
+            int beg = i + strlen(comName);
+            while (beg < size && script[beg] != '{')
+                ++beg;
+            ++beg;
+            int end = beg;
+            int brsum = 1;
+            while (script[end] != 0 && brsum != 0)
+            {
+                ++end;
+                if (script[end] == '{')
+                    ++brsum;
+                else if (script[end] == '}')
+                    --brsum;
+            }
+            //printf("%d ... %d (%d): %c\n", beg, end, size, script[beg]);
+            if (end >= size)
+                return -1;
+            while (parsBrakesBody(callstr + strlen(comName), &iflen) > 0)
+            {
+                int code = scriptBlockRunner(script + beg, end - beg, jobs, path);
+                if (code != 0)
+                    return code;
+                if (strcmp(comName, "if") == 0)
+                    break;
+            }
+            i = end;
+            while (script[i] != '\n')
+                ++i;
+            ++i;
+        }
+        else
+        {
+            oneStrCall(callstr, path, jobs, 0);
+            if (j < size - 1 && script[j] == '/' && script[j + 1] == '/')
+                while (j < size && script[j] != '\n' && script[j] != 0)
+                    ++j;
+            i = j + 1;
+        }
     }
-    while (callstr[pos] == ' ')
-        ++pos;
-    *oper = callstr[pos];
-    ++pos;
-    while (callstr[pos] == ' ')
-        ++pos;
-    while (callstr[pos] != ' ' && callstr[pos] != ')')
-    {
-        strncat(second, callstr + pos, 1);
-        ++pos;
-    }
-    while (callstr[pos] != ')')
-        ++pos;
-    ++pos;
-    return pos;
+    return 0;
 }
 
 int scriptRunner(char** argv)
@@ -395,51 +594,20 @@ int scriptRunner(char** argv)
     struct stat st;
     fstat(scriptfd, &st);
     char* script = (char*)mmap(NULL, sizeof(char)*st.st_size, PROT_READ, MAP_SHARED, scriptfd, 0);
-    int i = 0;
+    int i = 1;
     while (argv[i] != NULL)
     {
         char argstr[10];
-        sprintf(argstr, "arg%d", i);
+        sprintf(argstr, "arg%d", i - 1);
         setenv(argstr, argv[i], 1);
         ++i;
     }
     char argcstr[10];
-    sprintf(argcstr, "%d", i);
+    sprintf(argcstr, "%d", i - 1);
     setenv("argc", argcstr);
     char path[256];
     getcwd(path, sizeof(path));
-    while (i < st.st_size)
-    {
-        char callstr[maxCallLen];
-        char comName[32];
-        int j = i;
-        while (j < st.st_size && script[j] != '\n' && script[j] != 0)
-            ++j;
-        strncpy(callstr, script + i, j - i);
-        callstr[j - i] = 0;
-        i = j + 1;
-        getword(callstr, comName);
-        if (strcmp(comName, "exit") == 0)
-        {
-            int retcode = -1;
-            sscanf(callstr, "exit%d", &retcode);
-            return retcode;
-        }
-        if (strcmp(comName, "if") == 0)
-        {
-            char first[32];
-            char second[32];
-            char oper;
-            int endpos = parsOneBrakes(callstr + 2, &oper, first, second);
-            if (oper == '=' && strcmp(first, second) == 0)
-            {
-                oneStrCall(callstr + endpos + 1, path, jobs);
-            }
-            else
-                continue;
-        }
-        oneStrCall(callstr, path, jobs);
-    }
+    int code = scriptBlockRunner(script, st.st_size, jobs, path);
     close(scriptfd);
-    return 0;
+    return code;
 }
