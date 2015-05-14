@@ -12,6 +12,9 @@ const int PS_SIGNALED = 3;
 const int PS_NOTHING = 4;
 const int PS_RUNNING = 5;
 
+const int FG_IS_ACTIVE = 1;
+const int FG_IS_NOT_ACTIVE = 0;
+
 char* generate_process_title(char *const argv[])
 {
 	char** arg_ptr = argv;
@@ -192,6 +195,8 @@ void add_job(JobsList* jobs, pid_t new_pid, char* name)
 	jobs->jobs_list_ptr[jobs->jobs_count].pid = new_pid;
 	jobs->jobs_list_ptr[jobs->jobs_count].status = PS_RUNNING;
 	jobs->jobs_list_ptr[jobs->jobs_count].comand_str = name;
+	jobs->jobs_list_ptr[jobs->jobs_count].fake_fd = create_fake_discriptor();
+	jobs->jobs_list_ptr[jobs->jobs_count].current_input = dup(jobs->jobs_list_ptr[jobs->jobs_count].fake_fd[0]);
 	jobs->jobs_count++;
 }
 
@@ -286,4 +291,21 @@ int continue_process(JobsList* jobs, size_t job_number)
 		return 0;
 	}
 	return -1;
+}
+
+int process_to_foreground(JobsList* jobs, size_t job_number)
+{
+	if (jobs->jobs_count > job_number)
+	{
+	  //отдаем процессу stdin		
+		dup2(0, jobs->jobs_list_ptr[job_number].current_input);
+		jobs->jobs_list_ptr[job_number].fg_flag = FG_IS_ACTIVE;	
+		continue_process(jobs, job_number);
+		int process_info;
+		waitpid(jobs->jobs_list_ptr[job_number].pid, &process_info, 0);
+	}
+	else
+	{
+		return -1;
+	}
 }

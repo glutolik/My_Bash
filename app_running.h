@@ -18,6 +18,9 @@ typedef struct
 {
 	pid_t pid;
 	int status;
+	int fg_flag;
+	int current_input;
+	int* fake_fd;
 	char* comand_str;
 } JobStruct;
 
@@ -44,4 +47,5 @@ void delete_fake_discriptor(int* fd);
 int signal_process(JobsList* jobs, size_t job_number, int signal_to_send);
 int stop_process(JobsList* jobs, size_t job_number);
 int continue_process(JobsList* jobs, size_t job_number);
+int process_to_foreground(JobsList* jobs, size_t job_number);
 #endif
