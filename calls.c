@@ -25,6 +25,12 @@ int getword(const char* stream, char* output)
           ++st;
     if (stream[st] == 0)
         return -1;
+    if (st > 0 && stream[st - 1] == '$')
+    {
+        --st;
+        output[0] = '$';
+        ++i;
+    }
     while((stream[st + i] >= 'a' && stream[st + i] <= 'z') ||
           (stream[st + i] >= 'A' && stream[st + i] <= 'Z') ||
           (stream[st + i] >= '0' && stream[st + i] <= '9'))
@@ -223,27 +229,33 @@ int oneStrCall(const char* callstr, char* path, JobsList* jobs)
     else if (strcmp(comName, "jobbg") == 0)
     {
         int nmb;
-        sscanf(callstr, "jobsig%d", &nmb);
+        sscanf(callstr, "jobbg%d", &nmb);
         return continue_process(jobs, nmb);
     }
     else if (strcmp(comName, "jobfg") == 0)
     {
         int nmb;
-        sscanf(callstr, "jobsig%d", &nmb);
-        return -1;//return process_to_foreground(jobs, nmb);
+        sscanf(callstr, "jobfg%d", &nmb);
+        return process_to_foreground(jobs, nmb);
     }
     else if (strcmp(comName, "jobstop") == 0)
     {
         int nmb;
-        sscanf(callstr, "jobsig%d", &nmb);
+        sscanf(callstr, "jobstop%d", &nmb);
         return stop_process(jobs, nmb);
     }
     else if (strcmp(comName, "envvar") == 0)
     {
-        char* varname[32];
-        char* value[256];
+        char varname[32];
+        char value[256];
         if (getword(callstr + 6, varname) != -1 && getword(callstr + 7 + strlen(varname) + 1, value) != -1)
         {
+            if (value[0] == '$')
+            {
+                char* repl = getenv(value + 1);
+                if (repl != NULL)
+                    strcpy(value, repl);
+            }
             return setenv(varname, value, 1);
         }
         int i = 0;
@@ -273,7 +285,7 @@ int oneStrCall(const char* callstr, char* path, JobsList* jobs)
         char* nextProg = callstr;
         int infd = 0;
         int outfd = 1;
-        int BGflag = 0;
+        JobsList* BGflag = NULL;
         while(callstr[i] != 0)
         {
             if (callstr[i] == '|')
@@ -294,20 +306,30 @@ int oneStrCall(const char* callstr, char* path, JobsList* jobs)
             {
                 char filename[256];
                 sscanf(nextProg, ">%s", filename);
+                if (filename[0] == '$')
+                {
+                    filename[0] = '/';
+                    outfd = shm_open(filename, O_RDWR | O_CREAT, 0666);
+                }
                 outfd = open(filename, O_RDWR | O_CREAT, 0666);
             }
             else if (*nextProg == '<')
             {
                 char filename[256];
                 sscanf(nextProg, "<%s", filename);
+                if (filename[0] == '$')
+                {
+                    filename[0] = '/';
+                    infd = shm_open(filename, O_RDWR | O_CREAT, 0666);
+                }
                 infd = open(filename, O_RDWR | O_CREAT, 0666);
             }
             else if (*nextProg == '&')
-                BGflag = 1;
+                BGflag = jobs;
             while(*nextProg != 0 && (progSepar(*nextProg) == 0 || *nextProg <= ' '))
                 ++nextProg;
         }
-        if (run_comand_chain(infd, outfd, 2, progCount, progNames, allsargv, &code) != 0) //and BGflag in nearest future
+        if (run_comand_chain(infd, outfd, 2, progCount, progNames, allsargv, &code, BGflag) != 0)
         {
             printf("I can't find this comand: %s\n", comName);
             printf("You can try \"help\", but I think it will not help you\n");
@@ -374,6 +396,16 @@ int scriptRunner(char** argv)
     fstat(scriptfd, &st);
     char* script = (char*)mmap(NULL, sizeof(char)*st.st_size, PROT_READ, MAP_SHARED, scriptfd, 0);
     int i = 0;
+    while (argv[i] != NULL)
+    {
+        char argstr[10];
+        sprintf(argstr, "arg%d", i);
+        setenv(argstr, argv[i], 1);
+        ++i;
+    }
+    char argcstr[10];
+    sprintf(argcstr, "%d", i);
+    setenv("argc", argcstr);
     char path[256];
     getcwd(path, sizeof(path));
     while (i < st.st_size)

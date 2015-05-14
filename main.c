@@ -11,6 +11,7 @@
 #include <sys/mman.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <signal.h>
 #include <termios.h>
 #include "app_running.h"
 #include "calls.h"
@@ -48,6 +49,12 @@ int UnicodeSymWidth(int ch)
         ++i;
     }
     return len;
+}
+
+int lastSig = 0;
+void sigcc()
+{
+    lastSig = 2;
 }
 
 extern int maxCallLen;
@@ -123,6 +130,7 @@ int main(int argc, char **argv)
         printf("script terminated with code %d.\n", code);
         return code;
     }
+    signal(SIGINT, sigcc);
     char callstr[maxCallLen];
     char file_addr[256];
     char path[256];
