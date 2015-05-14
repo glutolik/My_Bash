@@ -33,7 +33,7 @@ int run_application(int d_in, int d_out, int d_err, const char* app_name, char *
 int bind_two_apps(int first, int input_fd, int output_fd, const char* app_name, char *const argv[]);
 
 int run_comand_chain(int d_in, int d_out, int d_err, int comand_count, 
-	const char** apps_names, char** apps_args[], int* returned_code);
+	const char** apps_names, char** apps_args[], int* returned_code, JobsList* jobs);
 
 JobsList* init_jobs_system(size_t new_size);
 void delete_jobs_system(JobsList* jobs);
