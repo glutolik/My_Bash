@@ -110,7 +110,13 @@ int main(int argc, char **argv)
     {
         if (strcmp(argv[1], "--help") == 0 || strcmp(argv[1], "--version") == 0)
         {
-            printf("Try e-bash. Only speed. Only quality. Only e-bash.\n");
+            printf("\nTry e-bash. Tolerante and user-friendly.\n");
+            int i;
+            for (i = 1; i <= 5; ++i)
+                printf("\033[%dm*\033[0m", 31 + i);
+            for (i = 5; i >= 0; --i)
+                printf("\033[%dm*\033[0m", 31 + i);
+            printf("\nOnly speed. Only quality. Only e-bash.\n");
             return 0;
         }
         int code = scriptRunner(argv);
@@ -130,6 +136,7 @@ int main(int argc, char **argv)
     {
         printf("\033[%dm*\033[0m", 31 + i);
     }
+    printf("\033]2;You can try e-bash now!\007", path);
     printf("\nHello in e-bash!\n");
 
     char** oldhist = NULL;
@@ -173,7 +180,7 @@ int main(int argc, char **argv)
                         callstr[i] = callstr[i + 1];
                 }
             }
-            else if (ch == 2117294875)
+            else if (ch == 2117294875) //delete
             {
                 if (cur < len)
                 {
@@ -182,7 +189,8 @@ int main(int argc, char **argv)
                     --len;
                 }
             }
-            else if (ch == 4283163) //я не пьян, это стрелка вверх
+            else if (ch == 4283163 || ch == -1220453605) //я не пьян, это стрелка вверх.
+                                                        //Два числа - это системонезависимость (почти) - x32 и x64
             {
                 if (histPos == oldhistCount + newhistCount)
                     strcpy(newhist[histPos - oldhistCount], callstr);
@@ -196,7 +204,7 @@ int main(int argc, char **argv)
                 len = strlen(callstr);
                 cur = len;
             }
-            else if (ch == 4348699) //and down
+            else if (ch == 4348699 || ch == -1220388069) //and down
             {
                 ++histPos;
                 if (histPos > oldhistCount + newhistCount)
@@ -208,26 +216,27 @@ int main(int argc, char **argv)
                 len = strlen(callstr);
                 cur = len;
             }
-            else if (ch == 4479771) //left
+            else if (ch == 4479771 || ch == -1220256997) //left
             {
                 if (cur > 0)
                     --cur;
             }
-            else if (ch == 4414235) //right
+            else if (ch == 4414235 || ch == -1220322533) //right
             {
                 if (cur < len)
                     ++cur;
             }
-            else if (ch == 4741915) //home (fn + left)
+            else if (ch == 4741915 || ch == 2117163803) //home (fn + left)
             {
                 cur = 0;
             }
-            else if (ch == 4610843) //end (fn + right)
+            else if (ch == 4610843 || ch == 2117360411) //end (fn + right)
             {
                 cur = len;
             }
-            else if ((char)ch == '\t') //tab, ch == 32521
+            else if ((char)ch == '\t') //tab, ch == 32521 on x64
             {
+                //autofilling
             }
             else if (len < maxCallLen - 4 && (char)ch >= ' ')
             {

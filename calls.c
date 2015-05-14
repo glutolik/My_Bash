@@ -2,6 +2,8 @@
 
 int maxCallLen = 512;
 
+extern char** environ;
+
 void strspcpy(char* output, const char* from)
 {
     int i = 0;
@@ -15,11 +17,19 @@ void strspcpy(char* output, const char* from)
 int getword(const char* stream, char* output)
 {
     int i = 0;
-    while((stream[i] >= 'a' && stream[i] <= 'z') ||
-          (stream[i] >= 'A' && stream[i] <= 'Z') ||
-          (stream[i] >= '0' && stream[i] <= '9'))
+    int st = 0;
+    while (stream[st] != 0 &&
+        !((stream[st] >= 'a' && stream[st] <= 'z') ||
+          (stream[st] >= 'A' && stream[st] <= 'Z') ||
+          (stream[st] >= '0' && stream[st] <= '9')))
+          ++st;
+    if (stream[st] == 0)
+        return -1;
+    while((stream[st + i] >= 'a' && stream[st + i] <= 'z') ||
+          (stream[st + i] >= 'A' && stream[st + i] <= 'Z') ||
+          (stream[st + i] >= '0' && stream[st + i] <= '9'))
     {
-        output[i] = stream[i];
+        output[i] = stream[st + i];
         ++i;
     }
     if (i < 1)
@@ -160,15 +170,20 @@ int oneStrCall(const char* callstr, char* path, JobsList* jobs)
         printf("\thelp - you are reading it now\n");
         printf("\tcd <path> - change directory to path\n");
         printf("\tjobs - print list of jobs - child processes\n");
-        printf("\tjobfg <nmb> - change job nmb to foreground\n");
+        printf("\tjobfg <nmb> - resume job nmb in foreground\n");
         printf("\tjobbg <nmb> - resume job nmb in background\n");
+        printf("\tjobstop <nmb> - stop job nmb to background\n");
         printf("\tjobsig <nmb> <signal> - send signal to job process\n");
+        printf("\tenvvar [name = value] - see envvar list or set name as value\n");
         printf("\te-bash <scriptfile.ebs> - launch e-bash script\n");
         printf("syntax of other calls:\n");
         printf("\t[path/]<programm> [args...] ['|'<samecall>] [&] [> output|< input]\n");
         printf("\tit is execute path/program (or paths from $PATH)\n");
         printf("\twhere samecall:[path/]<programm> [args...] [|<samecall>]\n");
         printf("\tand | it is conveyer chain, & - background launch\n");
+        printf("WARNING: developers of e-bash guarantee nothing!\n");
+        printf("If you ignore this syntax rules, anything may happen!\n");
+        printf("(It is possible to teleport to pole or start nuclear war by wrong syntax)\n");
         return 0;
     }
     else if (strcmp(comName, "cd") == 0)
@@ -185,8 +200,13 @@ int oneStrCall(const char* callstr, char* path, JobsList* jobs)
             ++i;
         strcpy(newDir, callstr + i);
         int code = chdir(newDir);
-        getcwd(path, 255);
-        return 0;
+        if (code == 0)
+        {
+            getcwd(path, 255);
+            printf("\033]2;e-bash in %s\007", path);
+            fflush(stdout);
+        }
+        return code;
     }
     else if (strcmp(comName, "jobs") == 0)
     {
@@ -205,6 +225,34 @@ int oneStrCall(const char* callstr, char* path, JobsList* jobs)
         int nmb;
         sscanf(callstr, "jobsig%d", &nmb);
         return continue_process(jobs, nmb);
+    }
+    else if (strcmp(comName, "jobfg") == 0)
+    {
+        int nmb;
+        sscanf(callstr, "jobsig%d", &nmb);
+        return -1;//return process_to_foreground(jobs, nmb);
+    }
+    else if (strcmp(comName, "jobstop") == 0)
+    {
+        int nmb;
+        sscanf(callstr, "jobsig%d", &nmb);
+        return stop_process(jobs, nmb);
+    }
+    else if (strcmp(comName, "envvar") == 0)
+    {
+        char* varname[32];
+        char* value[256];
+        if (getword(callstr + 6, varname) != -1 && getword(callstr + 7 + strlen(varname) + 1, value) != -1)
+        {
+            return setenv(varname, value, 1);
+        }
+        int i = 0;
+        while (environ[i] != NULL)
+        {
+            printf("%s\n", environ[i]);
+            ++i;
+        }
+        return 0;
     }
     /*else if (strcmp(comName, "ebs"))
     {
@@ -225,6 +273,7 @@ int oneStrCall(const char* callstr, char* path, JobsList* jobs)
         char* nextProg = callstr;
         int infd = 0;
         int outfd = 1;
+        int BGflag = 0;
         while(callstr[i] != 0)
         {
             if (callstr[i] == '|')
@@ -246,19 +295,19 @@ int oneStrCall(const char* callstr, char* path, JobsList* jobs)
                 char filename[256];
                 sscanf(nextProg, ">%s", filename);
                 outfd = open(filename, O_RDWR | O_CREAT, 0666);
-                break;
             }
             else if (*nextProg == '<')
             {
                 char filename[256];
                 sscanf(nextProg, "<%s", filename);
                 infd = open(filename, O_RDWR | O_CREAT, 0666);
-                break;
             }
-            while(*nextProg != 0 && progSepar(*nextProg) == 0 || *nextProg <= ' ')
+            else if (*nextProg == '&')
+                BGflag = 1;
+            while(*nextProg != 0 && (progSepar(*nextProg) == 0 || *nextProg <= ' '))
                 ++nextProg;
         }
-        if (run_comand_chain(infd, outfd, 2, progCount, progNames, allsargv, &code) != 0)
+        if (run_comand_chain(infd, outfd, 2, progCount, progNames, allsargv, &code) != 0) //and BGflag in nearest future
         {
             printf("I can't find this comand: %s\n", comName);
             printf("You can try \"help\", but I think it will not help you\n");
@@ -277,6 +326,38 @@ int oneStrCall(const char* callstr, char* path, JobsList* jobs)
         }
         return code;
     }
+}
+
+int parsOneBrakes(const char* callstr, char* oper, char* first, char* second)
+{
+    first[0] = 0;
+    second[0] = 0;
+    int pos = 0;
+    while (callstr[pos] != '(')
+        ++pos;
+    ++pos;
+    while (callstr[pos] == ' ')
+        ++pos;
+    while (callstr[pos] != ' ' && callstr[pos] != '=' && callstr[pos] != '!' && callstr[pos] != '<')
+    {
+        strncat(first, callstr + pos, 1);
+        ++pos;
+    }
+    while (callstr[pos] == ' ')
+        ++pos;
+    *oper = callstr[pos];
+    ++pos;
+    while (callstr[pos] == ' ')
+        ++pos;
+    while (callstr[pos] != ' ' && callstr[pos] != ')')
+    {
+        strncat(second, callstr + pos, 1);
+        ++pos;
+    }
+    while (callstr[pos] != ')')
+        ++pos;
+    ++pos;
+    return pos;
 }
 
 int scriptRunner(char** argv)
@@ -298,12 +379,33 @@ int scriptRunner(char** argv)
     while (i < st.st_size)
     {
         char callstr[maxCallLen];
+        char comName[32];
         int j = i;
         while (j < st.st_size && script[j] != '\n' && script[j] != 0)
             ++j;
         strncpy(callstr, script + i, j - i);
         callstr[j - i] = 0;
         i = j + 1;
+        getword(callstr, comName);
+        if (strcmp(comName, "exit") == 0)
+        {
+            int retcode = -1;
+            sscanf(callstr, "exit%d", &retcode);
+            return retcode;
+        }
+        if (strcmp(comName, "if") == 0)
+        {
+            char first[32];
+            char second[32];
+            char oper;
+            int endpos = parsOneBrakes(callstr + 2, &oper, first, second);
+            if (oper == '=' && strcmp(first, second) == 0)
+            {
+                oneStrCall(callstr + endpos + 1, path, jobs);
+            }
+            else
+                continue;
+        }
         oneStrCall(callstr, path, jobs);
     }
     close(scriptfd);
