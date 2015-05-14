@@ -234,7 +234,6 @@ int update_process_status(JobStruct* job, int* additional_info)
 		{
 			*additional_info = WTERMSIG(process_info);
 			job->status = PS_SIGNALED;
-			job->fg_flag = FG_IS_NOT_ACTIVE;
 		}
 		if (WIFCONTINUED(process_info))
 		{
@@ -246,12 +245,14 @@ int update_process_status(JobStruct* job, int* additional_info)
 
 void show_jobs(JobsList* jobs)
 {
+	printf("active  - %d\n", get_active_pid(jobs));
 	//printf("Jobs(%d)[%p]\n", jobs->jobs_count, jobs);
 	for (size_t i = 0; i < jobs->jobs_count; ++i)
 	{
 		int additional_info;
 		if (update_process_status(&(jobs->jobs_list_ptr[i]), &additional_info) == -1)
 		{
+			//delete_one_job(jobs, i);
 			continue;
 		}
 		char activity = (jobs->jobs_list_ptr[i].fg_flag == FG_IS_ACTIVE)? '+' : ' ';
@@ -344,6 +345,12 @@ pid_t get_active_pid(JobsList* jobs)
 	pid_t active_pid = getpid();
 	for (size_t i = 0; i < jobs->jobs_count; ++i)
 	{
+		int additional_info;
+		if (update_process_status(&(jobs->jobs_list_ptr[i]), &additional_info) == -1)
+		{
+			//delete_one_job(jobs, i);
+			continue;
+		}
 		if (jobs->jobs_list_ptr[i].fg_flag == FG_IS_ACTIVE)
 		{
 			active_pid = jobs->jobs_list_ptr[i].pid;
