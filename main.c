@@ -377,19 +377,23 @@ int main(int argc, char **argv)
             {
                 kill(get_active_pid(jobs), SIGINT);
                 //kill(getpid(), SIGKILL); //suicide
-                close(outpipe[0]);
-                close(outpipe[1]);
+                close(1);
                 char sch = '\n';
                 continue;
             }
             else if (ch == 4) //^D
             {
-                close(outpipe[0]);
-                close(outpipe[1]);
+                close(1);
                 continue;
             }
-            else if (get_active_pid(jobs) != getpid())
-                write(outpipe[1], &ch, sizeof(char));
+            else
+            {
+                //if (get_active_pid(jobs) != getpid())
+                {
+                    fprintf(stderr, "opya1!\n");
+                    write(1, &ch, sizeof(char));
+                }
+            }
         }
     }
     /*void *tmp = NULL;

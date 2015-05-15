@@ -479,7 +479,7 @@ int oneStrCall(const char* callstr, char* path, JobsList* jobs, int outpipe[2])
             while(*nextProg != 0 && (progSepar(*nextProg) == 0 || *nextProg <= ' '))
                 ++nextProg;
         }
-        if (run_comand_chain(infd, outfd, 2, progCount, progNames, allsargv, &code, jobs, BGflag) != 0)
+        if (run_comand_chain(infd, outfd, 2, outpipe[1], progCount, progNames, allsargv, &code, jobs, BGflag) != 0)
         {
             printf("I can't find this comand: %s\n", comName);
             printf("You can try \"help\", but I think it will not help you\n");
@@ -497,6 +497,8 @@ int oneStrCall(const char* callstr, char* path, JobsList* jobs, int outpipe[2])
             free(allsargv[i]);
         }
         close(outpipe[0]);
+        dup2(outpipe[1], 1);
+        close(outpipe[1]);
         return code;
     }
 }
