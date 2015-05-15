@@ -12,7 +12,7 @@
 
 int oneProgPars(char*** output, const char* callstr);
 
-int oneStrCall(const char* callstr, char* path, JobsList* jobs, int pipeinfd);
+int oneStrCall(const char* callstr, char* path, JobsList* jobs, int outpipe[2]);
 
 int scriptRunner(char** argv);
 

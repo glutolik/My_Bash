@@ -28,7 +28,21 @@ int mygch()
     struct termios tty, savetty;
     tcgetattr(0, &tty);
 	savetty = tty;
-	tty.c_lflag &= ~(ICANON | ECHO);
+	tty.c_lflag &= ~(ICANON | ECHO | ISIG);
+	tty.c_cc[VMIN] = 1;
+	tcsetattr(0, TCSAFLUSH, &tty);
+    int ch;
+	if (read(0, &ch, sizeof(int)) < 0)
+        ch = EOF;
+	tcsetattr(0, TCSANOW, &savetty);
+	return ch;
+}
+int intogch()
+{
+    struct termios tty, savetty;
+    tcgetattr(0, &tty);
+	savetty = tty;
+	tty.c_lflag &= ~(ICANON | ISIG);
 	tty.c_cc[VMIN] = 1;
 	tcsetattr(0, TCSAFLUSH, &tty);
     int ch;
@@ -138,8 +152,6 @@ int main(int argc, char **argv)
         printf("script terminated with code %d.\n", code);
         return code;
     }
-    int outpipe[2];
-    pipe(outpipe);
     signal(SIGINT, sigcc);
     char callstr[maxCallLen];
     char file_addr[256];
@@ -167,10 +179,11 @@ int main(int argc, char **argv)
     struct winsize ws;
     ioctl(1, TIOCGWINSZ, &ws);
     int termWidth = ws.ws_col;
+    int outpipe[2];
 
     while (1)
     {
-        if (1)//get_active_pid(jobs) == 0)
+        if (get_active_pid(jobs) == getpid())
         {
             printf("[\033[32m%s\033[0m]:%s> ", getenv("USER"), path);
             fflush(stdout);
@@ -345,21 +358,37 @@ int main(int argc, char **argv)
                 newhist[newhistCount][0] = 0;
             histPos = oldhistCount + newhistCount;
 
-            oneStrCall(callstr, path, jobs, outpipe[0]);
+            oneStrCall(callstr, path, jobs, outpipe);
         }
         else
         {
-            char ch = mygch();
+            char ch = intogch();
             if (ch == EOF)
             {
-                break;
-            }
-            else if (ch == 5)
-            {
-                fprintf(stderr, "uehueueuuu!\n");
+                printf("ura\n");
                 continue;
             }
-            else
+            else if (ch == 5) //^E
+            {
+                fprintf(stderr, "uehueueuuu %d ino %d!\n", get_active_pid(jobs), getpid());
+                continue;
+            }
+            else if (ch == 3) //^C
+            {
+                kill(get_active_pid(jobs), SIGINT);
+                //kill(getpid(), SIGKILL); //suicide
+                close(outpipe[0]);
+                close(outpipe[1]);
+                char sch = '\n';
+                continue;
+            }
+            else if (ch == 4) //^D
+            {
+                close(outpipe[0]);
+                close(outpipe[1]);
+                continue;
+            }
+            else if (get_active_pid(jobs) != getpid())
                 write(outpipe[1], &ch, sizeof(char));
         }
     }

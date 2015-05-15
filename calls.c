@@ -1,8 +1,12 @@
+#include "helps.h"
 #include "calls.h"
 
 int maxCallLen = 512;
 
 extern char** environ;
+
+extern const int RUN_BACKGROUND;
+extern const int RUN_FOREGROUND;
 
 void strspcpy(char* output, const char* from)
 {
@@ -297,7 +301,7 @@ int parsBrakes(char* callstr, int len)
     return ret;
 }
 
-int oneStrCall(const char* callstr, char* path, JobsList* jobs, int pipeinfd)
+int oneStrCall(const char* callstr, char* path, JobsList* jobs, int outpipe[2])
 {
     int i = 0;
     while (callstr[i] <= ' ')
@@ -312,41 +316,14 @@ int oneStrCall(const char* callstr, char* path, JobsList* jobs, int pipeinfd)
     comName[i] = 0;
     if (strcmp(comName, "exit") == 0) //и аналогично для всех внутренних команд
     {
-        /*int i = 0;
-        printf("\n");
-        appendHistory(newhist, newhistCount);
-        for (i = 0; i < 6; ++i)
-        {
-            printf("\033[%dm*\033[0m", 31 + i);
-            fflush(stdout);
-        }
-        printf("\nGoodbye.\n");
-        return 0;*/
         return -2;
     }
     else if (strcmp(comName, "help") == 0)
     {
-        printf("Some helpless information about e-bash:\n");
-        printf("internal comands:\n");
-        printf("\texit - exit from e-bash:(\n");
-        printf("\thelp - you are reading it now\n");
-        printf("\tcd <path> - change directory to path\n");
-        printf("\tjobs - print list of jobs - child processes\n");
-        printf("\tjobfg <nmb> - resume job nmb in foreground\n");
-        printf("\tjobbg <nmb> - resume job nmb in background\n");
-        printf("\tjobstop <nmb> - stop job nmb to background\n");
-        printf("\tjobsig <nmb> <signal> - send signal to job process\n");
-        printf("\tenvvar [name = value] - see envvar list or set name as value\n");
-        printf("\te-bash <scriptfile.ebs> - launch e-bash script\n");
-        printf("syntax of other calls:\n");
-        printf("\t[path/]<programm> [args...] ['|'<samecall>] [&] [> output|< input]\n");
-        printf("\tit is execute path/program (or paths from $PATH)\n");
-        printf("\twhere samecall:[path/]<programm> [args...] [|<samecall>]\n");
-        printf("\tand | it is conveyer chain, & - background launch\n");
-        printf("WARNING: developers of e-bash guarantee nothing!\n");
-        printf("If you ignore this syntax rules, anything may happen!\n");
-        printf("(It is possible to teleport to pole or start nuclear war by wrong syntax)\n");
-        return 0;
+        char func[32];
+        if (sscanf(callstr, "help%s", func) != 1)
+            strcpy(func, "all");
+        return printHelp(func);
     }
     else if (strcmp(comName, "cd") == 0)
     {
@@ -446,9 +423,10 @@ int oneStrCall(const char* callstr, char* path, JobsList* jobs, int pipeinfd)
         char** progNames = NULL;
         int progCount = 1;
         char* nextProg = callstr;
-        int infd = pipeinfd;
+        pipe(outpipe);
+        int infd = outpipe[0];
         int outfd = 1;
-        JobsList* BGflag = NULL;
+        int BGflag = RUN_FOREGROUND;
         while(callstr[i] != 0)
         {
             if (callstr[i] == '|')
@@ -474,7 +452,8 @@ int oneStrCall(const char* callstr, char* path, JobsList* jobs, int pipeinfd)
                     filename[0] = '/';
                     outfd = shm_open(filename, O_RDWR | O_CREAT, 0666);
                 }
-                outfd = open(filename, O_RDWR | O_CREAT, 0666);
+                else
+                    outfd = open(filename, O_RDWR | O_CREAT, 0666);
             }
             else if (*nextProg == '<')
             {
@@ -484,15 +463,23 @@ int oneStrCall(const char* callstr, char* path, JobsList* jobs, int pipeinfd)
                 {
                     filename[0] = '/';
                     infd = shm_open(filename, O_RDWR | O_CREAT, 0666);
+                    char* value = getenv(filename + 1);
+                    ftruncate(infd, strlen(value) + 1);
+                    char* shmvalue = (char*)mmap(NULL, strlen(value) + 1, PROT_READ | PROT_WRITE, MAP_SHARED, infd, 0);
+                    strcpy(shmvalue, value);
+                    munmap(shmvalue, strlen(value));
+                    close(infd);
+                    infd = shm_open(filename, O_RDONLY, 0666);
                 }
-                infd = open(filename, O_RDWR | O_CREAT, 0666);
+                else
+                    infd = open(filename, O_RDWR | O_CREAT, 0666);
             }
             else if (*nextProg == '&')
-                BGflag = jobs;
+                BGflag = RUN_BACKGROUND;
             while(*nextProg != 0 && (progSepar(*nextProg) == 0 || *nextProg <= ' '))
                 ++nextProg;
         }
-        if (run_comand_chain(infd, outfd, 2, progCount, progNames, allsargv, &code, BGflag) != 0)
+        if (run_comand_chain(infd, outfd, 2, progCount, progNames, allsargv, &code, jobs, BGflag) != 0)
         {
             printf("I can't find this comand: %s\n", comName);
             printf("You can try \"help\", but I think it will not help you\n");
@@ -509,6 +496,7 @@ int oneStrCall(const char* callstr, char* path, JobsList* jobs, int pipeinfd)
             free(progNames[i]);
             free(allsargv[i]);
         }
+        close(outpipe[0]);
         return code;
     }
 }
