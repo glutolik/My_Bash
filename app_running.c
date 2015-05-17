@@ -108,8 +108,11 @@ int run_comand_chain(int d_in, int d_out, int d_err, int comand_count,
 	const char** apps_names, char** apps_args[], int* returned_code, JobsList* jobs, int bg_flag)
 {
   //создаем пайп для общения c bash'ем	
-	int input_pipe[2];
-	pipe(input_pipe);
+	int* input_pipe = (int*) malloc(sizeof(int) * 2);
+	if (pipe(input_pipe) == -1)
+	{
+		perror("PIPE");
+	}
   //если читать нужно не из stdin, перенаправим чтение процесса в нужное место
     if (d_in != -1)	
     {
@@ -160,6 +163,7 @@ int run_comand_chain(int d_in, int d_out, int d_err, int comand_count,
 		}
 		else
 		{
+			printf("Running\n");
 			add_job(jobs, run_child, comand, input_pipe, FG_IS_ACTIVE);
 		}
 	}
@@ -177,7 +181,7 @@ JobsList* init_jobs_system(size_t new_size)
 
 void delete_jobs_system(JobsList* jobs)
 {
-	if (jobs == NULL)
+	/*if (jobs == NULL)
 	{
 		return;
 	}
@@ -186,7 +190,7 @@ void delete_jobs_system(JobsList* jobs)
 		free(jobs->jobs_list_ptr[i].comand_str);
 	}
 	free(jobs->jobs_list_ptr);
-	free(jobs);
+	free(jobs);*/
 }
 
 void add_job(JobsList* jobs, pid_t pid, char* name, int* new_fd, int fg_flag)
@@ -196,11 +200,6 @@ void add_job(JobsList* jobs, pid_t pid, char* name, int* new_fd, int fg_flag)
 	jobs->jobs_list_ptr[jobs->jobs_count].comand_str = name;
 	jobs->jobs_list_ptr[jobs->jobs_count].fd = new_fd;
 	jobs->jobs_list_ptr[jobs->jobs_count].fg_flag = fg_flag;
-	/*
-	jobs->jobs_list_ptr[jobs->jobs_count].fake_fd = fake_fd;
-	jobs->jobs_list_ptr[jobs->jobs_count].current_input = current_in;
-	jobs->jobs_list_ptr[jobs->jobs_count].real_input = real_in;
-	*/
 	jobs->jobs_count++;
 }
 
@@ -262,7 +261,6 @@ void show_jobs(JobsList* jobs)
 			continue;
 		}
 		char activity = (jobs->jobs_list_ptr[i].fg_flag == FG_IS_ACTIVE)? '+' : ' ';
-		//printf("c=%d,f=%d,r=%d\n", jobs->jobs_list_ptr[i].current_input, jobs->jobs_list_ptr[i].fake_fd[0], jobs->jobs_list_ptr[i].real_input);
 		if (jobs->jobs_list_ptr[i].status == PS_EXITED)
 		{
 			printf("[%d]%c %d %s with code %d (%s)\n", i, activity, jobs->jobs_list_ptr[i].pid, 
