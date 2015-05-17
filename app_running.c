@@ -20,29 +20,6 @@ const int FG_IS_DEAD = -1;
 const int RUN_BACKGROUND = 0;
 const int RUN_FOREGROUND = 1;
 
-char* generate_process_title(char *const argv[])
-{
-	char** arg_ptr = argv;
-	size_t total_length = strlen(argv[0]);
-	while (*arg_ptr != NULL)
-	{
-		total_length += 1 + strlen(*arg_ptr);
-		++arg_ptr;
-	}
-	char* comand = (char*) malloc(total_length);
-	total_length = 0;
-	arg_ptr = argv;
-	while (*arg_ptr != NULL)
-	{
-		//total_length += 1;//strlen(*arg_ptr);
-		sprintf(comand + total_length, "%s \n", *arg_ptr);
-		total_length += strlen(*arg_ptr) + 1;
-		++arg_ptr;
-	}
-	comand[total_length - 1] = '\0';
-	return comand;
-}
-
 int run_application(int d_in, int d_out, int d_err, const char* app_name, char *const argv[], 
 	int* returned_code, JobsList* jobs)
 {
@@ -106,15 +83,72 @@ int bind_two_apps(int first, int input_fd, int output_fd, const char* app_name, 
     return read_fd;
 }
 
+char* generate_process_title(size_t argc, char** argv[])
+{
+	size_t total_length = 0;
+	for (size_t i = 0; i < argc; ++i)
+	{
+		char** arg_ptr = argv[i];
+		while (*arg_ptr != NULL)
+		{
+			printf("arg:%s\n", *arg_ptr);
+			total_length += 1 + strlen(*arg_ptr);
+			++arg_ptr;
+		}
+		if (i + 1 != argc)
+		{
+			total_length += 2;
+		}
+	}
+	//printf("total name length = %d\n", total_length);
+	char* comand = (char*) malloc(total_length);
+	size_t offset = 0;
+	for (size_t i = 0; i < argc; ++i)
+	{
+		char** arg_ptr = argv[i];
+		while (*arg_ptr != NULL)
+		{
+			printf("arg:%s\n", *arg_ptr);
+			sprintf(comand + offset, "%s ", *arg_ptr);
+			offset += strlen(*arg_ptr) + 1;
+			++arg_ptr;
+		}
+		if (i + 1 != argc)
+		{
+			sprintf(comand + offset, "| ");
+			offset += 2;
+		}
+	}
+	comand[total_length - 1] = '\0';
+	printf("%s\n", comand);
+	/*
+	char** arg_ptr = argv;
+	size_t total_length = strlen(argv[0]);
+	while (*arg_ptr != NULL)
+	{
+		total_length += 1 + strlen(*arg_ptr);
+		++arg_ptr;
+	}
+	char* comand = (char*) malloc(total_length);
+	total_length = 0;
+	arg_ptr = argv;
+	while (*arg_ptr != NULL)
+	{
+		//total_length += 1;//strlen(*arg_ptr);
+		sprintf(comand + total_length, "%s \n", *arg_ptr);
+		total_length += strlen(*arg_ptr) + 1;
+		++arg_ptr;
+	}
+	comand[total_length - 1] = '\0';*/
+	return comand;
+}
+
 int run_comand_chain(int d_in, int d_out, int d_err, int comand_count, 
 	const char** apps_names, char** apps_args[], int* returned_code, JobsList* jobs, int bg_flag)
 {
   //создаем пайп для общения c bash'ем	
 	int* input_pipe = (int*) malloc(sizeof(int) * 2);
-	if (pipe(input_pipe) == -1)
-	{
-		perror("PIPE");
-	}
+	pipe(input_pipe);
   //если читать нужно не из stdin, перенаправим чтение процесса в нужное место
     if (d_in != -1)	
     {
@@ -163,7 +197,7 @@ int run_comand_chain(int d_in, int d_out, int d_err, int comand_count,
 	else
 	{
 		close(input_pipe[0]);
-		char* comand = generate_process_title(apps_args[0]);
+		char* comand = generate_process_title(comand_count, apps_args);
 		if (bg_flag == RUN_BACKGROUND)
 		{
 			printf("Job added\n");
