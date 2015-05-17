@@ -16,6 +16,7 @@
 #include <pthread.h>
 #include "app_running.h"
 #include "calls.h"
+#include "export.c"
 
 int outErr(const char* text, int n)
 {
@@ -83,7 +84,7 @@ extern int maxCallLen;
 
 int loadHistory(char*** oldhist)
 {
-    char histpath[255];
+    char histpath[PATH_MAX];
     sprintf(histpath, "/home/%s/.e-bash_history", getenv("USER"));
     int oldhistfd = open(histpath, O_RDONLY);
     int strCount = 0;
@@ -115,7 +116,7 @@ int loadHistory(char*** oldhist)
 }
 void appendHistory(const char** coms, int comCount)
 {
-    char histpath[255];
+    char histpath[PATH_MAX];
     sprintf(histpath, "/home/%s/.e-bash_history", getenv("USER"));
     FILE* histfile = fopen(histpath, "a");
     int i = 0;
@@ -127,7 +128,7 @@ void appendHistory(const char** coms, int comCount)
 }
 int pathAcc(const char* path, const char* file)
 {
-    char fullPath[256];
+    char fullPath[PATH_MAX];
     strcpy(fullPath, path);
     strcat(fullPath, file);
     return access(fullPath, F_OK);
@@ -154,8 +155,8 @@ int main(int argc, char **argv)
     }
     signal(SIGINT, sigcc);
     char callstr[maxCallLen];
-    char file_addr[256];
-    char path[256];
+    char file_addr[PATH_MAX];
+    char path[PATH_MAX];
     getcwd(path, sizeof(path));
     JobsList* jobs = init_jobs_system(50);
     int code;
@@ -179,8 +180,8 @@ int main(int argc, char **argv)
     struct winsize ws;
     ioctl(1, TIOCGWINSZ, &ws);
     int termWidth = ws.ws_col;
-    int outpipe[2];
-    pipe(outpipe);
+    //int outpipe[2];
+    //pipe(outpipe);
     int savedStdin = -1;
 
     pid_t prevActive = 0;
@@ -194,18 +195,18 @@ int main(int argc, char **argv)
 
         if (nowActive != getpid() && nowActive != prevActive)
         {
-            //fprintf(stderr, "Good luck!\n");
-            close(outpipe[0]);
+            fprintf(stderr, "Good luck!\n");
+            /*close(outpipe[0]);
             savedStdin = dup(1);
             dup2(outpipe[1], 1);
-            close(outpipe[1]);
+            close(outpipe[1]);*/
         }
         else if (nowActive != prevActive)
         {
-            //fprintf(stderr, "Hello in e-bash again!\n");
-            dup2(savedStdin, 1);
+            fprintf(stderr, "Hello in e-bash again!\n");
+            /*dup2(savedStdin, 1);
             close(savedStdin);
-            pipe(outpipe);
+            pipe(outpipe);*/
         }
         else if (nowActive == getpid())
         {
@@ -386,7 +387,7 @@ int main(int argc, char **argv)
                 newhist[newhistCount][0] = 0;
             histPos = oldhistCount + newhistCount;
 
-            oneStrCall(callstr, path, jobs, outpipe);
+            oneStrCall(callstr, path, jobs);
         }
         else
         {
@@ -405,13 +406,13 @@ int main(int argc, char **argv)
             {
                 kill(get_active_pid(jobs), SIGINT);
                 //kill(getpid(), SIGKILL); //suicide
-                close(1);
+                close(get_active_fd(jobs));
                 char sch = '\n';
                 continue;
             }
             else if (ch == 4) //^D
             {
-                close(1);
+                close(get_active_fd(jobs));
                 continue;
             }
             else if (ch == 26) //^Z
@@ -426,7 +427,7 @@ int main(int argc, char **argv)
                 //if (get_active_pid(jobs) != getpid())
                 {
                     //fprintf(stderr, "opya1!\n");
-                    write(1, &ch, sizeof(char));
+                    write(get_active_fd(jobs), &ch, sizeof(char));
                 }
                 //else
                 //    close(1);

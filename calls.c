@@ -109,7 +109,7 @@ int oneProgPars(char*** output, const char* callstr)
         }
         forbindArg[reallen] = 0;
         int j = 0;
-        char varenv[256];
+        char varenv[PATH_MAX];
         arglen = 0;
         for (j = 0; j < reallen; ++j)
         {
@@ -295,13 +295,13 @@ int parsBrakes(char* callstr, int len)
     while (oneword[i] != ' ' && oneword[i] != ' ')
     {
         ret = ret + oneword[i]*pos;
-        pos = pos * 255;
+        pos = pos * 256;
         ++i;
     }
     return ret;
 }
 
-int oneStrCall(const char* callstr, char* path, JobsList* jobs, int outpipe[2])
+int oneStrCall(const char* callstr, char* path, JobsList* jobs)
 {
     int i = 0;
     while (callstr[i] <= ' ')
@@ -333,7 +333,7 @@ int oneStrCall(const char* callstr, char* path, JobsList* jobs, int outpipe[2])
             printf("You can try \"help\", but I think it will not help you\n");
             return -1;
         }
-        char newDir[256];
+        char newDir[PATH_MAX];
         int i = 2;
         while (callstr[i] <= ' ' && callstr[i] != 0)
             ++i;
@@ -341,7 +341,7 @@ int oneStrCall(const char* callstr, char* path, JobsList* jobs, int outpipe[2])
         int code = chdir(newDir);
         if (code == 0)
         {
-            getcwd(path, 255);
+            getcwd(path, PATH_MAX);
             printf("\033]2;e-bash in %s\007", path);
             fflush(stdout);
         }
@@ -380,7 +380,7 @@ int oneStrCall(const char* callstr, char* path, JobsList* jobs, int outpipe[2])
     else if (strcmp(comName, "envvar") == 0)
     {
         char varname[32];
-        char value[256];
+        char value[PATH_MAX];
         if (getword(callstr + 6, varname) != -1 && getword(callstr + 7 + strlen(varname) + 1, value) != -1)
         {
             int i = 6 + strlen(varname) + 1;
@@ -423,7 +423,7 @@ int oneStrCall(const char* callstr, char* path, JobsList* jobs, int outpipe[2])
         char** progNames = NULL;
         int progCount = 1;
         char* nextProg = callstr;
-        int infd = outpipe[0];
+        int infd = -1;
         int outfd = 1;
         int BGflag = RUN_FOREGROUND;
         while(callstr[i] != 0)
@@ -444,7 +444,7 @@ int oneStrCall(const char* callstr, char* path, JobsList* jobs, int outpipe[2])
                 ++nextProg;
             if (*nextProg == '>')
             {
-                char filename[256];
+                char filename[PATH_MAX];
                 sscanf(nextProg, ">%s", filename);
                 if (filename[0] == '$')
                 {
@@ -456,7 +456,7 @@ int oneStrCall(const char* callstr, char* path, JobsList* jobs, int outpipe[2])
             }
             else if (*nextProg == '<')
             {
-                char filename[256];
+                char filename[PATH_MAX];
                 sscanf(nextProg, "<%s", filename);
                 if (filename[0] == '$')
                 {
@@ -478,7 +478,7 @@ int oneStrCall(const char* callstr, char* path, JobsList* jobs, int outpipe[2])
             while(*nextProg != 0 && (progSepar(*nextProg) == 0 || *nextProg <= ' '))
                 ++nextProg;
         }
-        if (run_comand_chain(infd, outfd, 2, outpipe[1], progCount, progNames, allsargv, &code, jobs, BGflag) != 0)
+        if (run_comand_chain(infd, outfd, 2, progCount, progNames, allsargv, &code, jobs, BGflag) != 0)
         {
             printf("I can't find this comand: %s\n", comName);
             printf("You can try \"help\", but I think it will not help you\n");
@@ -557,7 +557,7 @@ int scriptBlockRunner(const char* script, int size, JobsList* jobs, char* path)
         }
         else
         {
-            oneStrCall(callstr, path, jobs, 0);
+            oneStrCall(callstr, path, jobs);
             if (j < size - 1 && script[j] == '/' && script[j + 1] == '/')
                 while (j < size && script[j] != '\n' && script[j] != 0)
                     ++j;
@@ -591,7 +591,7 @@ int scriptRunner(char** argv)
     char argcstr[10];
     sprintf(argcstr, "%d", i - 1);
     setenv("argc", argcstr);
-    char path[256];
+    char path[PATH_MAX];
     getcwd(path, sizeof(path));
     int code = scriptBlockRunner(script, st.st_size, jobs, path);
     close(scriptfd);

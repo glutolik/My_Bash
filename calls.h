@@ -8,11 +8,16 @@
 #include <sys/mman.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <limits.h>
 #include "app_running.h"
+
+#ifndef PATH_MAX //because i have not it in my limits.h
+#define PATH_MAX 4096
+#endif // PATH_MAX
 
 int oneProgPars(char*** output, const char* callstr);
 
-int oneStrCall(const char* callstr, char* path, JobsList* jobs, int outpipe[2]);
+int oneStrCall(const char* callstr, char* path, JobsList* jobs);
 
 int scriptRunner(char** argv);
 
