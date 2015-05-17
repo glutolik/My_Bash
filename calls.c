@@ -423,7 +423,6 @@ int oneStrCall(const char* callstr, char* path, JobsList* jobs, int outpipe[2])
         char** progNames = NULL;
         int progCount = 1;
         char* nextProg = callstr;
-        pipe(outpipe);
         int infd = outpipe[0];
         int outfd = 1;
         int BGflag = RUN_FOREGROUND;
@@ -496,9 +495,6 @@ int oneStrCall(const char* callstr, char* path, JobsList* jobs, int outpipe[2])
             free(progNames[i]);
             free(allsargv[i]);
         }
-        close(outpipe[0]);
-        dup2(outpipe[1], 1);
-        close(outpipe[1]);
         return code;
     }
 }

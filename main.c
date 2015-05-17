@@ -180,10 +180,34 @@ int main(int argc, char **argv)
     ioctl(1, TIOCGWINSZ, &ws);
     int termWidth = ws.ws_col;
     int outpipe[2];
+    pipe(outpipe);
+    int savedStdin = -1;
+
+    pid_t prevActive = 0;
+    pid_t nowActive = 0;
 
     while (1)
     {
-        if (get_active_pid(jobs) == getpid())
+        nowActive = get_active_pid(jobs);
+        if (prevActive == 0)
+            prevActive = nowActive;
+
+        if (nowActive != getpid() && nowActive != prevActive)
+        {
+            fprintf(stderr, "Come back!\n");
+            close(outpipe[0]);
+            savedStdin = dup(1);
+            dup2(outpipe[1], 1);
+            close(outpipe[1]);
+        }
+        else if (nowActive != prevActive)
+        {
+            fprintf(stderr, "Hello in e-bash again!\n");
+            dup2(savedStdin, 1);
+            close(savedStdin);
+            pipe(outpipe);
+        }
+        else if (nowActive == getpid())
         {
             printf("[\033[32m%s\033[0m]:%s> ", getenv("USER"), path);
             fflush(stdout);
@@ -271,7 +295,11 @@ int main(int argc, char **argv)
                 }
                 else if ((char)ch == '\t') //tab, ch == 32521 on x64
                 {
-                    //autofilling
+                    /*i = len - 1;
+                    char partdir[PATH_MAX];
+                    while (i > 0 && callstr[i] != ' ')
+                        --i;
+                    strcpy(pathdir, callstr + i);*/
                 }
                 else if (len < maxCallLen - 4 && (char)ch >= ' ')
                 {
@@ -388,13 +416,17 @@ int main(int argc, char **argv)
             }
             else
             {
+                //fprintf(stderr, "opya0!\n");
                 //if (get_active_pid(jobs) != getpid())
                 {
                     fprintf(stderr, "opya1!\n");
                     write(1, &ch, sizeof(char));
                 }
+                //else
+                //    close(1);
             }
         }
+        prevActive = nowActive;
     }
     /*void *tmp = NULL;
     wait(tmp);
