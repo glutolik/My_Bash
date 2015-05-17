@@ -16,6 +16,7 @@
 #include <pthread.h>
 #include "app_running.h"
 #include "calls.h"
+#include "export.c"
 
 int outErr(const char* text, int n)
 {
@@ -83,7 +84,7 @@ extern int maxCallLen;
 
 int loadHistory(char*** oldhist)
 {
-    char histpath[255];
+    char histpath[PATH_MAX];
     sprintf(histpath, "/home/%s/.e-bash_history", getenv("USER"));
     int oldhistfd = open(histpath, O_RDONLY);
     int strCount = 0;
@@ -115,7 +116,7 @@ int loadHistory(char*** oldhist)
 }
 void appendHistory(const char** coms, int comCount)
 {
-    char histpath[255];
+    char histpath[PATH_MAX];
     sprintf(histpath, "/home/%s/.e-bash_history", getenv("USER"));
     FILE* histfile = fopen(histpath, "a");
     int i = 0;
@@ -127,7 +128,7 @@ void appendHistory(const char** coms, int comCount)
 }
 int pathAcc(const char* path, const char* file)
 {
-    char fullPath[256];
+    char fullPath[PATH_MAX];
     strcpy(fullPath, path);
     strcat(fullPath, file);
     return access(fullPath, F_OK);
@@ -154,8 +155,8 @@ int main(int argc, char **argv)
     }
     signal(SIGINT, sigcc);
     char callstr[maxCallLen];
-    char file_addr[256];
-    char path[256];
+    char file_addr[PATH_MAX];
+    char path[PATH_MAX];
     getcwd(path, sizeof(path));
     JobsList* jobs = init_jobs_system(50);
     int code;

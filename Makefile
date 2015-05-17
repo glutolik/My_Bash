@@ -1,7 +1,7 @@
 all: e-bash
 
 e-bash: main.o app_running.o calls.o helps.o
-	gcc -o e-bash main.o app_running.o calls.o helps.o -std=c99 -lrt
+	gcc -o e-bash main.o app_running.o calls.o helps.o -lrt
 
 main.o: main.c app_running.h calls.h
 	gcc -c main.c -std=c99
