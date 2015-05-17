@@ -91,7 +91,6 @@ char* generate_process_title(size_t argc, char** argv[])
 		char** arg_ptr = argv[i];
 		while (*arg_ptr != NULL)
 		{
-			printf("arg:%s\n", *arg_ptr);
 			total_length += 1 + strlen(*arg_ptr);
 			++arg_ptr;
 		}
@@ -108,7 +107,6 @@ char* generate_process_title(size_t argc, char** argv[])
 		char** arg_ptr = argv[i];
 		while (*arg_ptr != NULL)
 		{
-			printf("arg:%s\n", *arg_ptr);
 			sprintf(comand + offset, "%s ", *arg_ptr);
 			offset += strlen(*arg_ptr) + 1;
 			++arg_ptr;
@@ -120,26 +118,6 @@ char* generate_process_title(size_t argc, char** argv[])
 		}
 	}
 	comand[total_length - 1] = '\0';
-	printf("%s\n", comand);
-	/*
-	char** arg_ptr = argv;
-	size_t total_length = strlen(argv[0]);
-	while (*arg_ptr != NULL)
-	{
-		total_length += 1 + strlen(*arg_ptr);
-		++arg_ptr;
-	}
-	char* comand = (char*) malloc(total_length);
-	total_length = 0;
-	arg_ptr = argv;
-	while (*arg_ptr != NULL)
-	{
-		//total_length += 1;//strlen(*arg_ptr);
-		sprintf(comand + total_length, "%s \n", *arg_ptr);
-		total_length += strlen(*arg_ptr) + 1;
-		++arg_ptr;
-	}
-	comand[total_length - 1] = '\0';*/
 	return comand;
 }
 
