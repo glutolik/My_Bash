@@ -104,20 +104,18 @@ int bind_two_apps(int first, int input_fd, int output_fd, const char* app_name, 
     return read_fd;
 }
 
-int run_comand_chain(int d_in, int d_out, int d_err, int pipe_write, int comand_count, 
+int run_comand_chain(int d_in, int d_out, int d_err, int comand_count, 
 	const char** apps_names, char** apps_args[], int* returned_code, JobsList* jobs, int bg_flag)
 {
-	int next;
-	int* fake_fd = create_fake_discriptor();
-	int current_in;
-	if (bg_flag == RUN_BACKGROUND)
-	{
-		current_in = dup(fake_fd[0]);
-	}
-	else
-	{
-		current_in = dup(d_in);
-	}
+  //создаем пайп для общения c bash'ем	
+	int input_pipe[2];
+	pipe(input_pipe);
+  //если читать нужно не из stdin, перенаправим чтение процесса в нужное место
+    if (d_in != -1)	
+    {
+    	dup2(d_in, input_pipe[0]);
+    }
+    int next;
 	pid_t run_child = fork();
 	if (run_child == -1)
 	{
@@ -125,18 +123,15 @@ int run_comand_chain(int d_in, int d_out, int d_err, int pipe_write, int comand_
 	}
 	if (run_child == 0)
 	{
-		if (pipe_write != -1)
-		{
-			close(pipe_write);
-		}
+		close(input_pipe[1]);
 		for(size_t i = 0; i < comand_count; ++i)
 		{
 		  //если команда последняя, то писать в d_out, иначе в соединяющий пайп	
 			int current_out = (i + 1 == comand_count)? d_out : -1;
-		  //если команда первая, то читать из d_in	
+		  //если команда первая, то читать из "входного потока"
 			if (i == 0)
 			{
-				next = bind_two_apps(IS_FIRST, d_in, current_out, apps_names[i], apps_args[i]);
+				next = bind_two_apps(IS_FIRST, input_pipe[0], current_out, apps_names[i], apps_args[i]);
 			}
 		  //иначе из соединительного пайпа	
 			else
@@ -148,7 +143,6 @@ int run_comand_chain(int d_in, int d_out, int d_err, int pipe_write, int comand_
 				exit(EXIT_FAILURE);
 			}
 		}
-		
 		for (size_t i = 0; i < comand_count; ++i)
 		{
 			wait(NULL);
@@ -157,15 +151,16 @@ int run_comand_chain(int d_in, int d_out, int d_err, int pipe_write, int comand_
 	}
 	else
 	{
+		close(input_pipe[0]);
 		char* comand = generate_process_title(apps_args[0]);
 		if (bg_flag == RUN_BACKGROUND)
 		{
 			printf("Job added\n");
-			add_job(jobs, run_child, comand, fake_fd, current_in, d_in, FG_IS_NOT_ACTIVE);
+			add_job(jobs, run_child, comand, input_pipe, FG_IS_NOT_ACTIVE);
 		}
 		else
 		{
-			add_job(jobs, run_child, comand, fake_fd, current_in, d_in, FG_IS_ACTIVE);
+			add_job(jobs, run_child, comand, input_pipe, FG_IS_ACTIVE);
 		}
 	}
 	return 0;
@@ -194,26 +189,29 @@ void delete_jobs_system(JobsList* jobs)
 	free(jobs);
 }
 
-void add_job(JobsList* jobs, pid_t pid, char* name, int* fake_fd, int current_in, int real_in, int fg_flag)
+void add_job(JobsList* jobs, pid_t pid, char* name, int* new_fd, int fg_flag)
 {
 	jobs->jobs_list_ptr[jobs->jobs_count].pid = pid;
 	jobs->jobs_list_ptr[jobs->jobs_count].status = PS_RUNNING;
 	jobs->jobs_list_ptr[jobs->jobs_count].comand_str = name;
+	jobs->jobs_list_ptr[jobs->jobs_count].fd = new_fd;
+	jobs->jobs_list_ptr[jobs->jobs_count].fg_flag = fg_flag;
+	/*
 	jobs->jobs_list_ptr[jobs->jobs_count].fake_fd = fake_fd;
 	jobs->jobs_list_ptr[jobs->jobs_count].current_input = current_in;
 	jobs->jobs_list_ptr[jobs->jobs_count].real_input = real_in;
-	jobs->jobs_list_ptr[jobs->jobs_count].fg_flag = fg_flag;
+	*/
 	jobs->jobs_count++;
 }
 
 void delete_one_job(JobsList* jobs, size_t job_number)
 {
-	if (job_number < jobs->jobs_count)
+	/*if (job_number < jobs->jobs_count)
 	{
 		jobs->jobs_list_ptr[job_number].fg_flag = FG_IS_NOT_ACTIVE;
 		free(jobs->jobs_list_ptr[job_number].comand_str);
-		delete_fake_discriptor(jobs->jobs_list_ptr[job_number].fake_fd);
-	}
+		//delete_fake_discriptor(jobs->jobs_list_ptr[job_number].fake_fd);
+	}*/
 }
 
 int update_process_status(JobsList* jobs, size_t job_number, int* additional_info)
@@ -315,7 +313,8 @@ int stop_process(JobsList* jobs, size_t job_number)
 {
 	if (signal_process(jobs, job_number, SIGSTOP) == 0)
 	{
-		printf("Process stoped: %s\n", jobs->jobs_list_ptr[job_number].comand_str);
+		//process_to_background(jobs, job_number);
+		fprintf(stderr, "Process stoped: %s\n", jobs->jobs_list_ptr[job_number].comand_str);
 		return 0;
 	}
 	return -1;
@@ -325,7 +324,7 @@ int continue_process(JobsList* jobs, size_t job_number)
 {
 	if (signal_process(jobs, job_number, SIGCONT) == 0)
 	{
-		printf("Process continued: %s\n", jobs->jobs_list_ptr[job_number].comand_str);
+		//fprintf(stderr, "Process continued: %s\n", jobs->jobs_list_ptr[job_number].comand_str);
 		return 0;
 	}
 	return -1;
@@ -335,10 +334,11 @@ int process_to_foreground(JobsList* jobs, size_t job_number)
 {
 	if (jobs->jobs_count > job_number)
 	{
-		dup2(jobs->jobs_list_ptr[job_number].real_input, jobs->jobs_list_ptr[job_number].current_input);
+		//dup2(jobs->jobs_list_ptr[job_number].real_input, jobs->jobs_list_ptr[job_number].current_input);
 		jobs->jobs_list_ptr[job_number].fg_flag = FG_IS_ACTIVE;	
 		continue_process(jobs, job_number);
-		show_jobs(jobs);
+		//sleep(5);
+		//show_jobs(jobs);
 	}
 	else
 	{
@@ -350,7 +350,7 @@ int process_to_background(JobsList* jobs, size_t job_number)
 {
 	if (jobs->jobs_count > job_number)
 	{
-		dup2(jobs->jobs_list_ptr[job_number].fake_fd[0], jobs->jobs_list_ptr[job_number].current_input);
+		//dup2(jobs->jobs_list_ptr[job_number].fake_fd[0], jobs->jobs_list_ptr[job_number].current_input);
 		jobs->jobs_list_ptr[job_number].fg_flag = FG_IS_NOT_ACTIVE;	
 		//show_jobs(jobs);
 	}
@@ -360,9 +360,9 @@ int process_to_background(JobsList* jobs, size_t job_number)
 	}
 }
 
-pid_t get_active_pid(JobsList* jobs)
+JobStruct* get_active_job(JobsList* jobs)
 {
-	pid_t active_pid = getpid();
+	JobStruct* result = NULL;
 	for (size_t i = 0; i < jobs->jobs_count; ++i)
 	{
 		int additional_info;
@@ -373,11 +373,37 @@ pid_t get_active_pid(JobsList* jobs)
 		}
 		if (jobs->jobs_list_ptr[i].fg_flag == FG_IS_ACTIVE)
 		{
-			active_pid = jobs->jobs_list_ptr[i].pid;
+			result = &(jobs->jobs_list_ptr[i]);
 			break;
 		}
 	}
-	return active_pid;
+	return result;
+}
+
+pid_t get_active_pid(JobsList* jobs)
+{
+	JobStruct* active_job_ptr = get_active_job(jobs);
+	if (active_job_ptr == NULL)
+	{
+		return getpid();
+	}
+	else
+	{
+		return active_job_ptr->pid;
+	}
+}
+
+int get_active_fd(JobsList* jobs)
+{
+	JobStruct* active_job_ptr = get_active_job(jobs);
+	if (active_job_ptr == NULL)
+	{
+		return -1;
+	}
+	else
+	{
+		return active_job_ptr->fd[1];
+	}
 }
 
 ssize_t pid_to_job_number(JobsList* jobs, pid_t pid)
