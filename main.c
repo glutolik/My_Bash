@@ -194,7 +194,7 @@ int main(int argc, char **argv)
 
         if (nowActive != getpid() && nowActive != prevActive)
         {
-            fprintf(stderr, "Come back!\n");
+            //fprintf(stderr, "Good luck!\n");
             close(outpipe[0]);
             savedStdin = dup(1);
             dup2(outpipe[1], 1);
@@ -202,7 +202,7 @@ int main(int argc, char **argv)
         }
         else if (nowActive != prevActive)
         {
-            fprintf(stderr, "Hello in e-bash again!\n");
+            //fprintf(stderr, "Hello in e-bash again!\n");
             dup2(savedStdin, 1);
             close(savedStdin);
             pipe(outpipe);
@@ -414,12 +414,18 @@ int main(int argc, char **argv)
                 close(1);
                 continue;
             }
+            else if (ch == 26) //^Z
+            {
+                stop_process(jobs, pid_to_job_number(jobs, get_active_pid(jobs)));
+                process_to_background(jobs, pid_to_job_number(jobs, get_active_pid(jobs)));
+                continue;
+            }
             else
             {
                 //fprintf(stderr, "opya0!\n");
                 //if (get_active_pid(jobs) != getpid())
                 {
-                    fprintf(stderr, "opya1!\n");
+                    //fprintf(stderr, "opya1!\n");
                     write(1, &ch, sizeof(char));
                 }
                 //else
