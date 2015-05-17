@@ -4,7 +4,8 @@ const int IS_FIRST = 1;
 const int IS_NOT_FIRST = 0;
 
 const char* PROCESS_STATUS_TITLE[] = {"unknown", "terminated", "stopped", "signaled", "no change", "running"};
-//process status
+const int PROCESS_STATUS_COLORS[] = {36, 37, 33, 35, 0, 32};
+
 const int PS_UNKNOWN = 0;
 const int PS_EXITED = 1;
 const int PS_STOPED = 2;
@@ -14,6 +15,7 @@ const int PS_RUNNING = 5;
 
 const int FG_IS_ACTIVE = 1;
 const int FG_IS_NOT_ACTIVE = 0;
+const int FG_IS_DEAD = -1;
 
 const int RUN_BACKGROUND = 0;
 const int RUN_FOREGROUND = 1;
@@ -146,11 +148,17 @@ int run_comand_chain(int d_in, int d_out, int d_err, int comand_count,
 				exit(EXIT_FAILURE);
 			}
 		}
+		int exit_code = 0;
 		for (size_t i = 0; i < comand_count; ++i)
 		{
-			wait(NULL);
+			int exit_info;
+			wait(&exit_info);
+			if (WIFEXITED(exit_info) && WEXITSTATUS(exit_info) != 0)
+			{
+				exit_code = WEXITSTATUS(exit_info);
+			}
 		}
-		exit(EXIT_SUCCESS);
+		exit(exit_code);
 	}
 	else
 	{
@@ -181,16 +189,19 @@ JobsList* init_jobs_system(size_t new_size)
 
 void delete_jobs_system(JobsList* jobs)
 {
-	/*if (jobs == NULL)
+	if (jobs == NULL)
 	{
 		return;
 	}
 	for (size_t i = 0; i < jobs->jobs_count; ++i)
 	{
 		free(jobs->jobs_list_ptr[i].comand_str);
+		close(jobs->jobs_list_ptr[i].fd[0]);
+		close(jobs->jobs_list_ptr[i].fd[1]);
+		free(jobs->jobs_list_ptr[i].fd);
 	}
 	free(jobs->jobs_list_ptr);
-	free(jobs);*/
+	free(jobs);
 }
 
 void add_job(JobsList* jobs, pid_t pid, char* name, int* new_fd, int fg_flag)
@@ -203,32 +214,23 @@ void add_job(JobsList* jobs, pid_t pid, char* name, int* new_fd, int fg_flag)
 	jobs->jobs_count++;
 }
 
-void delete_one_job(JobsList* jobs, size_t job_number)
-{
-	/*if (job_number < jobs->jobs_count)
-	{
-		jobs->jobs_list_ptr[job_number].fg_flag = FG_IS_NOT_ACTIVE;
-		free(jobs->jobs_list_ptr[job_number].comand_str);
-		//delete_fake_discriptor(jobs->jobs_list_ptr[job_number].fake_fd);
-	}*/
-}
-
-int update_process_status(JobsList* jobs, size_t job_number, int* additional_info)
+int update_process_status(JobsList* jobs, size_t job_number)
 {
 	int process_info;
 	int wait_code = waitpid(jobs->jobs_list_ptr[job_number].pid, &process_info, WNOHANG | WUNTRACED | WCONTINUED);
+  //-1 если такого процесса не существует	
 	if (wait_code == -1)
 	{
 		return -1;
 	}
-	*additional_info = 0;
+  //pid если есть изменения в сотоянии процесса	
 	if (wait_code == jobs->jobs_list_ptr[job_number].pid)
 	{
 		if (WIFEXITED(process_info))
 		{
-			*additional_info = WEXITSTATUS(process_info);
+			jobs->jobs_list_ptr[job_number].term_info = WEXITSTATUS(process_info);
 			jobs->jobs_list_ptr[job_number].status = PS_EXITED;
-			process_to_background(jobs, job_number);
+			jobs->jobs_list_ptr[job_number].fg_flag = FG_IS_DEAD;
 		}
 		if (WIFSTOPPED(process_info))
 		{
@@ -237,8 +239,9 @@ int update_process_status(JobsList* jobs, size_t job_number, int* additional_inf
 		}
 		if (WIFSIGNALED(process_info))
 		{
-			*additional_info = WTERMSIG(process_info);
+			jobs->jobs_list_ptr[job_number].term_info = WTERMSIG(process_info);
 			jobs->jobs_list_ptr[job_number].status = PS_SIGNALED;
+			jobs->jobs_list_ptr[job_number].fg_flag = FG_IS_DEAD;
 		}
 		if (WIFCONTINUED(process_info))
 		{
@@ -251,52 +254,48 @@ int update_process_status(JobsList* jobs, size_t job_number, int* additional_inf
 void show_jobs(JobsList* jobs)
 {
 	printf("active  - %d\n", get_active_pid(jobs));
-	//printf("Jobs(%d)[%p]\n", jobs->jobs_count, jobs);
 	for (size_t i = 0; i < jobs->jobs_count; ++i)
 	{
-		int additional_info;
-		if (update_process_status(jobs, i, &additional_info) == -1)
+		update_process_status(jobs, i);
+		printf("\033[%dm", PROCESS_STATUS_COLORS[jobs->jobs_list_ptr[i].status]);
+		printf("[%d]", i);
+		if (jobs->jobs_list_ptr[i].fg_flag != FG_IS_DEAD)
 		{
-			//delete_one_job(jobs, i);
-			continue;
+			printf("*");
 		}
-		char activity = (jobs->jobs_list_ptr[i].fg_flag == FG_IS_ACTIVE)? '+' : ' ';
+		else
+		{
+			printf("-");
+		}
+		printf(" %d %s ", jobs->jobs_list_ptr[i].pid, PROCESS_STATUS_TITLE[jobs->jobs_list_ptr[i].status]);
 		if (jobs->jobs_list_ptr[i].status == PS_EXITED)
 		{
-			printf("[%d]%c %d %s with code %d (%s)\n", i, activity, jobs->jobs_list_ptr[i].pid, 
-				PROCESS_STATUS_TITLE[jobs->jobs_list_ptr[i].status], additional_info, 
-				jobs->jobs_list_ptr[i].comand_str);
-			continue;
+			printf("with code %d ", jobs->jobs_list_ptr[i].term_info);
 		}
 		if (jobs->jobs_list_ptr[i].status == PS_SIGNALED)
 		{
-			printf("[%d]%c %d %s by signal %d (%s)\n", i, activity, jobs->jobs_list_ptr[i].pid, 
-				PROCESS_STATUS_TITLE[jobs->jobs_list_ptr[i].status], additional_info, 
-				jobs->jobs_list_ptr[i].comand_str);
-			continue;
+			printf("by signal %d ", jobs->jobs_list_ptr[i].term_info);
 		}
-		printf("[%d]%c %d %s (%s)\n", i, activity, jobs->jobs_list_ptr[i].pid,
-			PROCESS_STATUS_TITLE[jobs->jobs_list_ptr[i].status], jobs->jobs_list_ptr[i].comand_str);	
+		printf("(%s)\n", jobs->jobs_list_ptr[i].comand_str);	
+		printf("\033[0m");
 	}
 }
 
-int* create_fake_discriptor(void)
+int if_process_exist(JobsList* jobs, size_t job_number)
 {
-	int* new_fd = (int*) malloc(2 * sizeof(int));
-	pipe(new_fd);
-	return new_fd;
-}
-
-void delete_fake_discriptor(int* fd)
-{
-	close(fd[0]);
-	close(fd[1]);
-	free(fd);
+	if (job_number < jobs->jobs_count && jobs->jobs_list_ptr[job_number].fg_flag != FG_IS_DEAD)
+	{
+		return 0;
+	}
+	else
+	{
+		return -1;
+	}	
 }
 
 int signal_process(JobsList* jobs, size_t job_number, int signal_to_send)
 {
-	if (job_number < jobs->jobs_count)
+	if (if_process_exist(jobs, job_number) == 0)
 	{
 		kill(jobs->jobs_list_ptr[job_number].pid, signal_to_send);
 		return 0;
@@ -311,7 +310,7 @@ int stop_process(JobsList* jobs, size_t job_number)
 {
 	if (signal_process(jobs, job_number, SIGSTOP) == 0)
 	{
-		//process_to_background(jobs, job_number);
+		process_to_background(jobs, job_number);
 		fprintf(stderr, "Process stoped: %s\n", jobs->jobs_list_ptr[job_number].comand_str);
 		return 0;
 	}
@@ -322,7 +321,7 @@ int continue_process(JobsList* jobs, size_t job_number)
 {
 	if (signal_process(jobs, job_number, SIGCONT) == 0)
 	{
-		//fprintf(stderr, "Process continued: %s\n", jobs->jobs_list_ptr[job_number].comand_str);
+		fprintf(stderr, "Process continued: %s\n", jobs->jobs_list_ptr[job_number].comand_str);
 		return 0;
 	}
 	return -1;
@@ -330,32 +329,23 @@ int continue_process(JobsList* jobs, size_t job_number)
 
 int process_to_foreground(JobsList* jobs, size_t job_number)
 {
-	if (jobs->jobs_count > job_number)
+	if (if_process_exist(jobs, job_number) == 0)
 	{
-		//dup2(jobs->jobs_list_ptr[job_number].real_input, jobs->jobs_list_ptr[job_number].current_input);
 		jobs->jobs_list_ptr[job_number].fg_flag = FG_IS_ACTIVE;	
 		continue_process(jobs, job_number);
-		//sleep(5);
-		//show_jobs(jobs);
+		return 0;
 	}
-	else
-	{
-		return -1;
-	}
+    return -1;
 }
 
 int process_to_background(JobsList* jobs, size_t job_number)
 {
-	if (jobs->jobs_count > job_number)
+	if (if_process_exist(jobs, job_number) == 0)
 	{
-		//dup2(jobs->jobs_list_ptr[job_number].fake_fd[0], jobs->jobs_list_ptr[job_number].current_input);
 		jobs->jobs_list_ptr[job_number].fg_flag = FG_IS_NOT_ACTIVE;	
-		//show_jobs(jobs);
+		return 0;
 	}
-	else
-	{
-		return -1;
-	}
+	return -1;
 }
 
 JobStruct* get_active_job(JobsList* jobs)
@@ -363,12 +353,7 @@ JobStruct* get_active_job(JobsList* jobs)
 	JobStruct* result = NULL;
 	for (size_t i = 0; i < jobs->jobs_count; ++i)
 	{
-		int additional_info;
-		if (update_process_status(jobs, i, &additional_info) == -1)
-		{
-			//delete_one_job(jobs, i);
-			continue;
-		}
+		update_process_status(jobs, i);
 		if (jobs->jobs_list_ptr[i].fg_flag == FG_IS_ACTIVE)
 		{
 			result = &(jobs->jobs_list_ptr[i]);
