@@ -352,7 +352,7 @@ int process_to_background(JobsList* jobs, size_t job_number)
 	{
 		dup2(jobs->jobs_list_ptr[job_number].fake_fd[0], jobs->jobs_list_ptr[job_number].current_input);
 		jobs->jobs_list_ptr[job_number].fg_flag = FG_IS_NOT_ACTIVE;	
-		show_jobs(jobs);
+		//show_jobs(jobs);
 	}
 	else
 	{
@@ -378,4 +378,16 @@ pid_t get_active_pid(JobsList* jobs)
 		}
 	}
 	return active_pid;
+}
+
+ssize_t pid_to_job_number(JobsList* jobs, pid_t pid)
+{
+	for (size_t i = 0; i < jobs->jobs_count; ++i)
+	{
+		if (jobs->jobs_list_ptr[i].pid == pid)
+		{
+			return i;
+		}
+	}
+	return -1;
 }

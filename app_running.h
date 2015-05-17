@@ -51,4 +51,5 @@ int continue_process(JobsList* jobs, size_t job_number);
 int process_to_foreground(JobsList* jobs, size_t job_number);
 int process_to_background(JobsList* jobs, size_t job_number);
 pid_t get_active_pid(JobsList* jobs);
+ssize_t pid_to_job_number(JobsList* jobs, pid_t pid);
 #endif
