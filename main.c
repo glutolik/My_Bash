@@ -52,6 +52,7 @@ int intogch()
 	tcsetattr(0, TCSANOW, &savetty);
 	return ch;
 }
+struct termios stdtty;
 int UnicodeSymWidth(int ch)
 {
     int i = 0;
@@ -180,6 +181,7 @@ int main(int argc, char **argv)
     struct winsize ws;
     ioctl(1, TIOCGWINSZ, &ws);
     int termWidth = ws.ws_col;
+    tcgetattr(0, &stdtty);
     //int outpipe[2];
     //pipe(outpipe);
     int savedStdin = -1;
@@ -296,11 +298,39 @@ int main(int argc, char **argv)
                 }
                 else if ((char)ch == '\t') //tab, ch == 32521 on x64
                 {
-                    /*i = len - 1;
-                    char partdir[PATH_MAX];
-                    while (i > 0 && callstr[i] != ' ')
+                    i = cur - 1;
+                    while (i >= 0 && callstr[i] != ' ')
                         --i;
-                    strcpy(pathdir, callstr + i);*/
+                    ++i;
+                    int lastpos = cur;
+                    while (lastpos > i && callstr[lastpos] != '/')
+                        --lastpos;
+                    if (lastpos != i)
+                    {
+                        callstr[lastpos] = 0;
+                        struct dirent** namelist;
+                        int inDirCount = scandir(callstr + i, &namelist, NULL, alphasort);
+                        callstr[lastpos] = '/';
+                        ++lastpos;
+                        for (i = 0; i < inDirCount; ++i)
+                        {
+                            int j = 0;
+                            while (namelist[i]->d_name[j] != 0 && callstr[lastpos + j] != 0 &&
+                                    callstr[lastpos + j] == namelist[i]->d_name[j])
+                                ++j;
+                            if (namelist[i]->d_name[j] != 0 && callstr[lastpos + j] != 0)
+                                continue;
+                            int lendiff = 0;
+                            while (callstr[lastpos + lendiff] != 0 && callstr[lastpos + lendiff] != ' ')
+                                ++lendiff;
+                            lendiff = strlen(namelist[i]->d_name) - lendiff;
+                            strcpy(callstr + lastpos, namelist[i]->d_name);
+                            len = len + lendiff;
+                            while (callstr[cur] != 0 && callstr[cur] != ' ')
+                                ++cur;
+                            break;
+                        }
+                    }
                 }
                 else if (len < maxCallLen - 4 && (char)ch >= ' ')
                 {
@@ -387,7 +417,7 @@ int main(int argc, char **argv)
                 newhist[newhistCount][0] = 0;
             histPos = oldhistCount + newhistCount;
 
-            oneStrCall(callstr, path, jobs);
+            oneStrCall(callstr, path, jobs, -1);
         }
         else
         {
@@ -399,7 +429,8 @@ int main(int argc, char **argv)
             }
             else if (ch == 5) //^E
             {
-                fprintf(stderr, "uehueueuuu %d ino %d!\n", get_active_pid(jobs), getpid());
+                fprintf(stderr, "--debug info--:\nact %d, e-bash %d\n", get_active_pid(jobs), getpid());
+                show_jobs(jobs);
                 continue;
             }
             else if (ch == 3) //^C
@@ -438,5 +469,6 @@ int main(int argc, char **argv)
     /*void *tmp = NULL;
     wait(tmp);
     printf("%d\n", a);*/
+    delete_jobs_system(jobs);
     return 0;
 }

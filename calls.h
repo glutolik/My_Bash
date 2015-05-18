@@ -17,7 +17,7 @@
 
 int oneProgPars(char*** output, const char* callstr);
 
-int oneStrCall(const char* callstr, char* path, JobsList* jobs);
+int oneStrCall(const char* callstr, char* path, JobsList* jobs, int infdFrom);
 
 int scriptRunner(char** argv);
 
