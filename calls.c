@@ -588,7 +588,7 @@ int scriptRunner(char** argv)
         fprintf(stderr, "Error: script file %s does not exist.\n", filename);
         return -1;
     }
-    JobsList* jobs = init_jobs_system(50);
+    JobsList* jobs = init_jobs_system(5000); //for script it should be bigger
     struct stat st;
     fstat(scriptfd, &st);
     char* script = (char*)mmap(NULL, sizeof(char)*st.st_size, PROT_READ, MAP_SHARED, scriptfd, 0);

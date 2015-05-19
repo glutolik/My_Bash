@@ -199,7 +199,7 @@ int main(int argc, char **argv)
     char file_addr[PATH_MAX];
     char path[PATH_MAX];
     getcwd(path, sizeof(path));
-    JobsList* jobs = init_jobs_system(50);
+    JobsList* jobs = init_jobs_system(50); //for user, i think, it is enough
     int code;
 
     int i = 0;
@@ -212,8 +212,9 @@ int main(int argc, char **argv)
     printf("\nHello in e-bash!\n");
 
     char** oldhist = NULL;
-    char** newhist = (char**)malloc(500*sizeof(char*));
-    for (i = 0; i < 500; ++i)
+    int maxNewhistCount = 500;
+    char** newhist = (char**)malloc(maxNewhistCount*sizeof(char*));
+    for (i = 0; i < maxNewhistCount; ++i)
         newhist[i] = (char*)malloc(maxCallLen*(sizeof(char)));
     int oldhistCount = loadHistory(&oldhist);
     int newhistCount = 0;
@@ -431,6 +432,13 @@ int main(int argc, char **argv)
                     fflush(stdout);
                 }
                 tcsetattr(0, TCSANOW, &stdtty);
+                delete_jobs_system(jobs);
+                for (i = 0; i < oldhistCount; ++i)
+                    free(oldhist[i]);
+                free(oldhist);
+                for (i = 0; i < maxNewhistCount; ++i)
+                    free(newhist[i]);
+                free(newhist);
                 printf("\nGoodbye.\n\n");
                 return 0;
             }
@@ -445,6 +453,9 @@ int main(int argc, char **argv)
                 if (newhistCount == 500)
                 {
                     appendHistory(newhist, newhistCount);
+                    for (i = 0; i < oldhistCount; ++i)
+                        free(oldhist[i]);
+                    free(oldhist);
                     oldhistCount = loadHistory(&oldhist);
                     newhistCount = 0;
                     histPos = oldhistCount;
