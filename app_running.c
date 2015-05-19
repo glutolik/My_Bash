@@ -224,13 +224,12 @@ void add_job(JobsList* jobs, pid_t pid, char* name, int* new_fd, int fg_flag)
 	jobs->jobs_count++;
 }
 
-int update_process_status(JobsList* jobs, size_t job_number)
+int analise_wait_status(JobsList* jobs, size_t job_number, int process_info, int wait_code)
 {
-	int process_info;
-	int wait_code = waitpid(jobs->jobs_list_ptr[job_number].pid, &process_info, WNOHANG | WUNTRACED | WCONTINUED);
   //-1 если такого процесса не существует	
 	if (wait_code == -1)
 	{
+		fprintf(stderr, "-1\n");
 		if (job_number < jobs->jobs_count)
 		{
 			jobs->jobs_list_ptr[job_number].status = PS_UNKNOWN;
@@ -262,8 +261,15 @@ int update_process_status(JobsList* jobs, size_t job_number)
 		{
 			jobs->jobs_list_ptr[job_number].status = PS_RUNNING;
 		}
-	}
+	}	
 	return 0;
+}
+
+int update_process_status(JobsList* jobs, size_t job_number)
+{
+	int process_info;
+	int wait_code = waitpid(jobs->jobs_list_ptr[job_number].pid, &process_info, WNOHANG | WUNTRACED | WCONTINUED);
+    return analise_wait_status(jobs, job_number, wait_code, process_info);
 }
 
 void show_jobs(JobsList* jobs)
@@ -414,4 +420,17 @@ ssize_t pid_to_job_number(JobsList* jobs, pid_t pid)
 		}
 	}
 	return -1;
+}
+
+int wait_while_running(JobsList* jobs)
+{
+	JobStruct* active_job = get_active_job(jobs);
+	if (active_job == NULL)
+	{
+		return 0;
+	}
+	int process_info;
+	int wait_code = waitpid(active_job->pid, &process_info, WUNTRACED);	
+	size_t active_job_number = active_job - jobs->jobs_list_ptr;
+	analise_wait_status(jobs, active_job_number, process_info, wait_code);
 }

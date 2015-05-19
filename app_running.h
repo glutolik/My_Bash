@@ -52,4 +52,5 @@ int process_to_background(JobsList* jobs, size_t job_number);
 pid_t get_active_pid(JobsList* jobs);
 int get_active_fd(JobsList* jobs);
 ssize_t pid_to_job_number(JobsList* jobs, pid_t pid);
+int wait_while_running(JobsList* jobs);
 #endif
