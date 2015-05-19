@@ -1,10 +1,10 @@
 all: e-bash
 
 e-bash: main.o app_running.o calls.o helps.o
-	gcc -o e-bash main.o app_running.o calls.o helps.o -lrt
+	gcc -o e-bash main.o app_running.o calls.o helps.o -lrt -lpthread
 
 main.o: main.c app_running.h calls.h
-	gcc -c main.c -std=c99
+	gcc -c main.c
 
 app_running.o: app_running.c app_running.h
 	gcc -c app_running.c -std=c99
