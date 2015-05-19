@@ -299,7 +299,7 @@ void show_jobs(JobsList* jobs)
 		}
 		printf("(%s)\n", jobs->jobs_list_ptr[i].comand_str);	
 		printf("\033[0m");
-		fflush(1);
+		fflush(stdout);
 	}
 }
 
