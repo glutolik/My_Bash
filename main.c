@@ -70,18 +70,6 @@ int UnicodeSymWidth(int ch)
     return len;
 }
 
-int lastSig = 0;
-void sigcc()
-{
-    lastSig = 2;
-}
-void listenerTerm()
-{
-    lastSig = -1;
-    char foreof = 5;
-    write(0, &foreof, sizeof(char));
-}
-
 extern int maxCallLen;
 
 int loadHistory(char*** oldhist)
@@ -176,7 +164,7 @@ static void* stdinStream(void* vdjobs)
         }
         else if (ch == 22) //^V
         {
-            fprintf(stderr, ": V means vendetta!\n");
+            fprintf(stderr, " for Vendetta!\n");
             kill(get_active_pid(jobs), SIGKILL);
             continue;
         }
@@ -207,7 +195,6 @@ int main(int argc, char **argv)
         printf("script terminated with code %d.\n", code);
         return code;
     }
-    signal(SIGINT, sigcc);
     char callstr[maxCallLen];
     char file_addr[PATH_MAX];
     char path[PATH_MAX];
@@ -270,7 +257,7 @@ int main(int argc, char **argv)
             int ch;
             //read(0, &ch, 1);
             ch = mygch();
-            while ((char)ch != '\n' && (char)ch != EOF) //reading and mdifying callstr
+            while ((char)ch != '\n' && (char)ch != EOF && (char)ch != 22) //reading and mdifying callstr, 22 = ^V
             {
                 int i;
                 int oldlen = len;
@@ -432,7 +419,7 @@ int main(int argc, char **argv)
             }
             callstr[len] = 0;
             printf("\n");
-            if (code == EOF || strcmp(callstr, "exit") == 0) //и аналогично для всех внутренних команд
+            if (code == EOF || (char)ch == 22 || strcmp(callstr, "exit") == 0) //и аналогично для всех внутренних команд
             {
                 int i = 0;
                 printf("\n");
