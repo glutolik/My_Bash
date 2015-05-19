@@ -293,7 +293,7 @@ int parsBrakes(const char* callstr, int len)
         else
             fprintf(stderr, "NO BUG((\n");*/
         oneword = getenv(varname);
-        fprintf(stderr, "%s () getenv ok\n", callstr);
+        //fprintf(stderr, "%s () getenv ok\n", callstr);
     }
     if (sscanf(oneword, "%d", &ret) == 1)
         return ret;

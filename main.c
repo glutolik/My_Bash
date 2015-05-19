@@ -135,6 +135,50 @@ int pathAcc(const char* path, const char* file)
     return access(fullPath, F_OK);
 }
 
+static void* stdinStream(void* vdjobs)
+{
+    JobsList* jobs = (JobsList*)vdjobs;
+    while (1)
+    {
+        char ch = intogch();
+        if (ch == EOF)
+        {
+            printf("ura\n");
+            continue;
+        }
+        else if (ch == 5) //^E
+        {
+            fprintf(stderr, "--debug info--:\nact %d, e-bash %d\n", get_active_pid(jobs), getpid());
+            show_jobs(jobs);
+            continue;
+        }
+        else if (ch == 3) //^C
+        {
+            kill(get_active_pid(jobs), SIGINT);
+            //kill(getpid(), SIGKILL); //suicide
+            close(get_active_fd(jobs));
+            char sch = '\n';
+            continue;
+        }
+        else if (ch == 4) //^D
+        {
+            close(get_active_fd(jobs));
+            continue;
+        }
+        else if (ch == 26) //^Z
+        {
+            stop_process(jobs, pid_to_job_number(jobs, get_active_pid(jobs)));
+            process_to_background(jobs, pid_to_job_number(jobs, get_active_pid(jobs)));
+            continue;
+        }
+        else
+        {
+            write(get_active_fd(jobs), &ch, sizeof(char));
+        }
+    }
+    pthread_exit(NULL);
+}
+
 int main(int argc, char **argv)
 {
     if (argc > 1)
@@ -188,6 +232,7 @@ int main(int argc, char **argv)
 
     pid_t prevActive = 0;
     pid_t nowActive = 0;
+    pthread_t stdinStreamer;
 
     while (1)
     {
@@ -197,19 +242,16 @@ int main(int argc, char **argv)
 
         if (nowActive != getpid() && nowActive != prevActive)
         {
-            fprintf(stderr, "Good luck!\n");
-            /*close(outpipe[0]);
-            savedStdin = dup(1);
-            dup2(outpipe[1], 1);
-            close(outpipe[1]);*/
+            //fprintf(stderr, "Good luck!\n");
+            pthread_create(&stdinStreamer, NULL, stdinStream, (void*)jobs);
+            waitpid(nowActive, NULL, 0);
+            pthread_cancel(stdinStreamer);
+            pthread_join(stdinStreamer, NULL);
         }
-        else if (nowActive != prevActive)
+        /*else if (nowActive != prevActive)
         {
             fprintf(stderr, "Hello in e-bash again!\n");
-            /*dup2(savedStdin, 1);
-            close(savedStdin);
-            pipe(outpipe);*/
-        }
+        }*/
         else if (nowActive == getpid())
         {
             printf("[\033[32m%s\033[0m]:%s> ", getenv("USER"), path);
@@ -419,51 +461,7 @@ int main(int argc, char **argv)
 
             oneStrCall(callstr, path, jobs, -1);
         }
-        else
-        {
-            char ch = intogch();
-            if (ch == EOF)
-            {
-                printf("ura\n");
-                continue;
-            }
-            else if (ch == 5) //^E
-            {
-                fprintf(stderr, "--debug info--:\nact %d, e-bash %d\n", get_active_pid(jobs), getpid());
-                show_jobs(jobs);
-                continue;
-            }
-            else if (ch == 3) //^C
-            {
-                kill(get_active_pid(jobs), SIGINT);
-                //kill(getpid(), SIGKILL); //suicide
-                close(get_active_fd(jobs));
-                char sch = '\n';
-                continue;
-            }
-            else if (ch == 4) //^D
-            {
-                close(get_active_fd(jobs));
-                continue;
-            }
-            else if (ch == 26) //^Z
-            {
-                stop_process(jobs, pid_to_job_number(jobs, get_active_pid(jobs)));
-                process_to_background(jobs, pid_to_job_number(jobs, get_active_pid(jobs)));
-                continue;
-            }
-            else
-            {
-                //fprintf(stderr, "opya0!\n");
-                //if (get_active_pid(jobs) != getpid())
-                {
-                    //fprintf(stderr, "opya1!\n");
-                    write(get_active_fd(jobs), &ch, sizeof(char));
-                }
-                //else
-                //    close(1);
-            }
-        }
+
         prevActive = nowActive;
     }
     /*void *tmp = NULL;
