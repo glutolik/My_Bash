@@ -222,6 +222,8 @@ int main(int argc, char **argv)
     ioctl(1, TIOCGWINSZ, &ws);
     int termWidth = ws.ws_col;
     int savedStdin = -1;
+    struct termios stdtty;
+    tcgetattr(0, &stdtty);
 
     pid_t prevActive = 0;
     pid_t nowActive = 0;
@@ -422,14 +424,14 @@ int main(int argc, char **argv)
             if (code == EOF || (char)ch == 22 || strcmp(callstr, "exit") == 0) //и аналогично для всех внутренних команд
             {
                 int i = 0;
-                printf("\n");
                 appendHistory(newhist, newhistCount);
                 for (i = 0; i < 6; ++i)
                 {
                     printf("\033[%dm*\033[0m", 31 + i);
                     fflush(stdout);
                 }
-                printf("\nGoodbye.\n");
+                tcsetattr(0, TCSANOW, &stdtty);
+                printf("\nGoodbye.\n\n");
                 return 0;
             }
             if (len < 1)

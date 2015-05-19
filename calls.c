@@ -498,7 +498,7 @@ int oneStrCall(const char* callstr, char* path, JobsList* jobs, int infdFrom)
             while(allsargv[i][j] != NULL)
             {
                 //fprintf(stderr, "arg # %d: %s\n", j, allsargv[i][j]);
-                //free(allsargv[i][j]);
+                free(allsargv[i][j]);
                 //fprintf(stderr, "arg # %d ok\n", j);
                 ++j;
             }
