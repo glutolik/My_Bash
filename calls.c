@@ -170,7 +170,7 @@ int parsBrakesBody(char* callstr, int* iflen)
     return parsBrakes(callstr + start, niflen);
 }
 
-int parsBrakes(char* callstr, int len)
+int parsBrakes(const char* callstr, int len)
 {
     int i = 0;
     int brsum = 0;
@@ -283,9 +283,17 @@ int parsBrakes(char* callstr, int len)
                  (callstr[i] >= 'A' && callstr[i] <= 'Z') ||
                  (callstr[i] >= '0' && callstr[i] <= '9')))
             ++i;
-        callstr[i] = 0;
-        oneword = getenv(callstr + pos + 1);
-        callstr[i] = ' ';
+        //fprintf(stderr, "oKoKo\n");
+        char varname[32];
+        strncpy(varname, callstr + pos + 1, i - pos - 1);
+        varname[i - pos - 1] = 0;
+       /* fprintf(stderr, "%s () all levels ok\n", varname);
+        if (getenv(varname) == NULL)
+            fprintf(stderr, "BUG!!!!!!\n");
+        else
+            fprintf(stderr, "NO BUG((\n");*/
+        oneword = getenv(varname);
+        //fprintf(stderr, "%s () getenv ok\n", callstr);
     }
     if (sscanf(oneword, "%d", &ret) == 1)
         return ret;
@@ -301,7 +309,7 @@ int parsBrakes(char* callstr, int len)
     return ret;
 }
 
-int oneStrCall(const char* callstr, char* path, JobsList* jobs, int outpipe[2])
+int oneStrCall(const char* callstr, char* path, JobsList* jobs, int infdFrom)
 {
     int i = 0;
     while (callstr[i] <= ' ')
@@ -423,7 +431,7 @@ int oneStrCall(const char* callstr, char* path, JobsList* jobs, int outpipe[2])
         char** progNames = NULL;
         int progCount = 1;
         char* nextProg = callstr;
-        int infd = outpipe[0];
+        int infd = infdFrom;
         int outfd = 1;
         int BGflag = RUN_FOREGROUND;
         while(callstr[i] != 0)
@@ -478,7 +486,7 @@ int oneStrCall(const char* callstr, char* path, JobsList* jobs, int outpipe[2])
             while(*nextProg != 0 && (progSepar(*nextProg) == 0 || *nextProg <= ' '))
                 ++nextProg;
         }
-        if (run_comand_chain(infd, outfd, 2, outpipe[1], progCount, progNames, allsargv, &code, jobs, BGflag) != 0)
+        if (run_comand_chain(infd, outfd, 2, progCount, progNames, allsargv, &code, jobs, BGflag) != 0)
         {
             printf("I can't find this comand: %s\n", comName);
             printf("You can try \"help\", but I think it will not help you\n");
@@ -489,7 +497,9 @@ int oneStrCall(const char* callstr, char* path, JobsList* jobs, int outpipe[2])
             int j = 0;
             while(allsargv[i][j] != NULL)
             {
-                free(allsargv[i][j]);
+                //fprintf(stderr, "arg # %d: %s\n", j, allsargv[i][j]);
+                //free(allsargv[i][j]);
+                //fprintf(stderr, "arg # %d ok\n", j);
                 ++j;
             }
             free(progNames[i]);
@@ -558,6 +568,8 @@ int scriptBlockRunner(const char* script, int size, JobsList* jobs, char* path)
         else
         {
             oneStrCall(callstr, path, jobs, 0);
+            //show_jobs(jobs);
+            wait_while_running(jobs);
             if (j < size - 1 && script[j] == '/' && script[j + 1] == '/')
                 while (j < size && script[j] != '\n' && script[j] != 0)
                     ++j;
@@ -595,5 +607,6 @@ int scriptRunner(char** argv)
     getcwd(path, sizeof(path));
     int code = scriptBlockRunner(script, st.st_size, jobs, path);
     close(scriptfd);
+    delete_jobs_system(jobs);
     return code;
 }

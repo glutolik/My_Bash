@@ -13,6 +13,7 @@
 #include <sys/stat.h>
 #include <signal.h>
 #include <termios.h>
+#include <math.h>
 #include <pthread.h>
 #include "app_running.h"
 #include "calls.h"
@@ -52,6 +53,7 @@ int intogch()
 	tcsetattr(0, TCSANOW, &savetty);
 	return ch;
 }
+struct termios stdtty;
 int UnicodeSymWidth(int ch)
 {
     int i = 0;
@@ -134,6 +136,52 @@ int pathAcc(const char* path, const char* file)
     return access(fullPath, F_OK);
 }
 
+static void* stdinStream(void* vdjobs)
+{
+    JobsList* jobs = (JobsList*)vdjobs;
+    while (1)
+    {
+        char ch = intogch();
+        if (ch == EOF)
+        {
+            printf("ura\n");
+            continue;
+        }
+        else if (ch == 5) //^E
+        {
+            fprintf(stderr, "--debug info beg--\n");
+            fprintf(stderr, "act %d, e-bash %d\n", get_active_pid(jobs), getpid());
+            show_jobs(jobs);
+            fprintf(stderr, "--debug info end--\n");
+            continue;
+        }
+        else if (ch == 3) //^C
+        {
+            kill(get_active_pid(jobs), SIGINT);
+            //kill(getpid(), SIGKILL); //suicide
+            close(get_active_fd(jobs));
+            char sch = '\n';
+            continue;
+        }
+        else if (ch == 4) //^D
+        {
+            close(get_active_fd(jobs));
+            continue;
+        }
+        else if (ch == 26) //^Z
+        {
+            stop_process(jobs, pid_to_job_number(jobs, get_active_pid(jobs)));
+            process_to_background(jobs, pid_to_job_number(jobs, get_active_pid(jobs)));
+            continue;
+        }
+        else
+        {
+            write(get_active_fd(jobs), &ch, sizeof(char));
+        }
+    }
+    pthread_exit(NULL);
+}
+
 int main(int argc, char **argv)
 {
     if (argc > 1)
@@ -180,12 +228,11 @@ int main(int argc, char **argv)
     struct winsize ws;
     ioctl(1, TIOCGWINSZ, &ws);
     int termWidth = ws.ws_col;
-    int outpipe[2];
-    pipe(outpipe);
     int savedStdin = -1;
 
     pid_t prevActive = 0;
     pid_t nowActive = 0;
+    pthread_t stdinStreamer;
 
     while (1)
     {
@@ -193,21 +240,18 @@ int main(int argc, char **argv)
         if (prevActive == 0)
             prevActive = nowActive;
 
-        if (nowActive != getpid() && nowActive != prevActive)
+        if (nowActive != getpid())// && nowActive != prevActive)
         {
             //fprintf(stderr, "Good luck!\n");
-            close(outpipe[0]);
-            savedStdin = dup(1);
-            dup2(outpipe[1], 1);
-            close(outpipe[1]);
+            pthread_create(&stdinStreamer, NULL, stdinStream, (void*)jobs);
+            wait_while_running(jobs);
+            pthread_cancel(stdinStreamer);
+            pthread_join(stdinStreamer, NULL);
         }
-        else if (nowActive != prevActive)
+        /*else if (nowActive != prevActive)
         {
-            //fprintf(stderr, "Hello in e-bash again!\n");
-            dup2(savedStdin, 1);
-            close(savedStdin);
-            pipe(outpipe);
-        }
+            fprintf(stderr, "Hello in e-bash again!\n");
+        }*/
         else if (nowActive == getpid())
         {
             printf("[\033[32m%s\033[0m]:%s> ", getenv("USER"), path);
@@ -296,11 +340,39 @@ int main(int argc, char **argv)
                 }
                 else if ((char)ch == '\t') //tab, ch == 32521 on x64
                 {
-                    /*i = len - 1;
-                    char partdir[PATH_MAX];
-                    while (i > 0 && callstr[i] != ' ')
+                    i = cur - 1;
+                    while (i >= 0 && callstr[i] != ' ')
                         --i;
-                    strcpy(pathdir, callstr + i);*/
+                    ++i;
+                    int lastpos = cur;
+                    while (lastpos > i && callstr[lastpos] != '/')
+                        --lastpos;
+                    if (lastpos != i)
+                    {
+                        callstr[lastpos] = 0;
+                        struct dirent** namelist;
+                        int inDirCount = scandir(callstr + i, &namelist, NULL, alphasort);
+                        callstr[lastpos] = '/';
+                        ++lastpos;
+                        for (i = 0; i < inDirCount; ++i)
+                        {
+                            int j = 0;
+                            while (namelist[i]->d_name[j] != 0 && callstr[lastpos + j] != 0 &&
+                                    callstr[lastpos + j] == namelist[i]->d_name[j])
+                                ++j;
+                            if (namelist[i]->d_name[j] != 0 && callstr[lastpos + j] != 0)
+                                continue;
+                            int lendiff = 0;
+                            while (callstr[lastpos + lendiff] != 0 && callstr[lastpos + lendiff] != ' ')
+                                ++lendiff;
+                            lendiff = strlen(namelist[i]->d_name) - lendiff;
+                            strcpy(callstr + lastpos, namelist[i]->d_name);
+                            len = len + lendiff;
+                            while (callstr[cur] != 0 && callstr[cur] != ' ')
+                                ++cur;
+                            break;
+                        }
+                    }
                 }
                 else if (len < maxCallLen - 4 && (char)ch >= ' ')
                 {
@@ -387,56 +459,14 @@ int main(int argc, char **argv)
                 newhist[newhistCount][0] = 0;
             histPos = oldhistCount + newhistCount;
 
-            oneStrCall(callstr, path, jobs, outpipe);
+            oneStrCall(callstr, path, jobs, -1);
         }
-        else
-        {
-            char ch = intogch();
-            if (ch == EOF)
-            {
-                printf("ura\n");
-                continue;
-            }
-            else if (ch == 5) //^E
-            {
-                fprintf(stderr, "uehueueuuu %d ino %d!\n", get_active_pid(jobs), getpid());
-                continue;
-            }
-            else if (ch == 3) //^C
-            {
-                kill(get_active_pid(jobs), SIGINT);
-                //kill(getpid(), SIGKILL); //suicide
-                close(1);
-                char sch = '\n';
-                continue;
-            }
-            else if (ch == 4) //^D
-            {
-                close(1);
-                continue;
-            }
-            else if (ch == 26) //^Z
-            {
-                stop_process(jobs, pid_to_job_number(jobs, get_active_pid(jobs)));
-                process_to_background(jobs, pid_to_job_number(jobs, get_active_pid(jobs)));
-                continue;
-            }
-            else
-            {
-                //fprintf(stderr, "opya0!\n");
-                //if (get_active_pid(jobs) != getpid())
-                {
-                    //fprintf(stderr, "opya1!\n");
-                    write(1, &ch, sizeof(char));
-                }
-                //else
-                //    close(1);
-            }
-        }
+
         prevActive = nowActive;
     }
     /*void *tmp = NULL;
     wait(tmp);
     printf("%d\n", a);*/
+    delete_jobs_system(jobs);
     return 0;
 }
