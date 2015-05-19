@@ -216,6 +216,11 @@ void delete_jobs_system(JobsList* jobs)
 
 void add_job(JobsList* jobs, pid_t pid, char* name, int* new_fd, int fg_flag)
 {
+	if (jobs->jobs_count >= jobs->list_size)
+	{
+		jobs->list_size *= 2;
+		jobs->jobs_list_ptr = realloc(jobs->jobs_list_ptr, jobs->list_size * sizeof(JobStruct));
+	}
 	jobs->jobs_list_ptr[jobs->jobs_count].pid = pid;
 	jobs->jobs_list_ptr[jobs->jobs_count].status = PS_RUNNING;
 	jobs->jobs_list_ptr[jobs->jobs_count].comand_str = name;
