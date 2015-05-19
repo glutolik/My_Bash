@@ -4,7 +4,7 @@ const int IS_FIRST = 1;
 const int IS_NOT_FIRST = 0;
 
 const char* PROCESS_STATUS_TITLE[] = {"unknown", "terminated", "stopped", "signaled", "no change", "running"};
-const int PROCESS_STATUS_COLORS[] = {36, 37, 33, 35, 0, 32};
+const int PROCESS_STATUS_COLORS[] = {36, 37, 33, 35, 0, 34};
 
 const int PS_UNKNOWN = 0;
 const int PS_EXITED = 1;
@@ -178,12 +178,10 @@ int run_comand_chain(int d_in, int d_out, int d_err, int comand_count,
 		char* comand = generate_process_title(comand_count, apps_args);
 		if (bg_flag == RUN_BACKGROUND)
 		{
-			printf("Job added\n");
 			add_job(jobs, run_child, comand, input_pipe, FG_IS_NOT_ACTIVE);
 		}
 		else
 		{
-			printf("Running\n");
 			add_job(jobs, run_child, comand, input_pipe, FG_IS_ACTIVE);
 		}
 	}
@@ -233,6 +231,11 @@ int update_process_status(JobsList* jobs, size_t job_number)
   //-1 если такого процесса не существует	
 	if (wait_code == -1)
 	{
+		if (job_number < jobs->jobs_count)
+		{
+			jobs->jobs_list_ptr[job_number].status = PS_UNKNOWN;
+			jobs->jobs_list_ptr[job_number].fg_flag = FG_IS_DEAD;
+		}
 		return -1;
 	}
   //pid если есть изменения в сотоянии процесса	
