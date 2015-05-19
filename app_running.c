@@ -229,8 +229,7 @@ int analise_wait_status(JobsList* jobs, size_t job_number, int process_info, int
   //-1 если такого процесса не существует	
 	if (wait_code == -1)
 	{
-		fprintf(stderr, "-1\n");
-		if (job_number < jobs->jobs_count)
+		if (if_process_exist(jobs, job_number) == 0)
 		{
 			jobs->jobs_list_ptr[job_number].status = PS_UNKNOWN;
 			jobs->jobs_list_ptr[job_number].fg_flag = FG_IS_DEAD;
@@ -269,12 +268,11 @@ int update_process_status(JobsList* jobs, size_t job_number)
 {
 	int process_info;
 	int wait_code = waitpid(jobs->jobs_list_ptr[job_number].pid, &process_info, WNOHANG | WUNTRACED | WCONTINUED);
-    return analise_wait_status(jobs, job_number, wait_code, process_info);
+    return analise_wait_status(jobs, job_number, process_info, wait_code);
 }
 
 void show_jobs(JobsList* jobs)
 {
-	printf("active  - %d\n", get_active_pid(jobs));
 	for (size_t i = 0; i < jobs->jobs_count; ++i)
 	{
 		update_process_status(jobs, i);
@@ -359,7 +357,6 @@ int process_to_foreground(JobsList* jobs, size_t job_number)
 	{
 		jobs->jobs_list_ptr[job_number].fg_flag = FG_IS_ACTIVE;	
 		continue_process(jobs, job_number);
-		update_process_status(jobs, job_number);
 		return 0;
 	}
     return -1;
