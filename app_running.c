@@ -216,7 +216,6 @@ void delete_jobs_system(JobsList* jobs)
 
 void add_job(JobsList* jobs, pid_t pid, char* name, int* new_fd, int fg_flag)
 {
-	printf("list %d/%d\n", jobs->jobs_count, jobs->list_size);
 	if (jobs->jobs_count >= jobs->list_size)
 	{
 		jobs->list_size *= 2;
