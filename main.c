@@ -157,10 +157,10 @@ static void* stdinStream(void* vdjobs)
         }
         else if (ch == 3) //^C
         {
+            //fprintf(stderr, "Just a moment, nigga...\n");
             kill(get_active_pid(jobs), SIGINT);
+            //fprintf(stderr, "I killed it, yea!\n");
             //kill(getpid(), SIGKILL); //suicide
-            close(get_active_fd(jobs));
-            char sch = '\n';
             continue;
         }
         else if (ch == 4) //^D
@@ -172,6 +172,12 @@ static void* stdinStream(void* vdjobs)
         {
             stop_process(jobs, pid_to_job_number(jobs, get_active_pid(jobs)));
             process_to_background(jobs, pid_to_job_number(jobs, get_active_pid(jobs)));
+            continue;
+        }
+        else if (ch == 22) //^V
+        {
+            fprintf(stderr, ": V means vendetta!\n");
+            kill(get_active_pid(jobs), SIGKILL);
             continue;
         }
         else
