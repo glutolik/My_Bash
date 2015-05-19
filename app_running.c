@@ -278,6 +278,10 @@ void show_jobs(JobsList* jobs)
 	for (size_t i = 0; i < jobs->jobs_count; ++i)
 	{
 		update_process_status(jobs, i);
+		if (jobs->jobs_list_ptr[i].fg_flag == FG_IS_DEAD && jobs->jobs_list_ptr[i].term_info == 0)
+		{
+			continue;
+		}
 		printf("\033[%dm", PROCESS_STATUS_COLORS[jobs->jobs_list_ptr[i].status]);
 		printf("[%d]", i);
 		if (jobs->jobs_list_ptr[i].fg_flag != FG_IS_DEAD)
@@ -355,6 +359,7 @@ int process_to_foreground(JobsList* jobs, size_t job_number)
 	{
 		jobs->jobs_list_ptr[job_number].fg_flag = FG_IS_ACTIVE;	
 		continue_process(jobs, job_number);
+		update_process_status(jobs, job_number);
 		return 0;
 	}
     return -1;
