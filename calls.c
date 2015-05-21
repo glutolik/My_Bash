@@ -457,7 +457,7 @@ int oneStrCall(const char* callstr, char* path, JobsList* jobs, int infdFrom)
                 if (filename[0] == '$')
                 {
                     filename[0] = '/';
-                    outfd = shm_open(filename, O_RDWR | O_CREAT, 0666);
+                    outfd = shm_open(filename, O_RDWR | O_CREAT, 0666); //TODO
                 }
                 else
                     outfd = open(filename, O_RDWR | O_CREAT, 0666);
@@ -516,7 +516,7 @@ int scriptBlockRunner(const char* script, int size, JobsList* jobs, char* path)
     {
         char callstr[maxCallLen];
         char comName[32];
-        while (script[i] <= ' ')
+        while (i < size && script[i] <= ' ')
             ++i;
         int j = i;
         while (j < size && script[j] != '\n' && script[j] != 0 && (j >= size - 1 || script[j] != '/' || script[j + 1] != '/'))
