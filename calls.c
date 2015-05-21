@@ -309,6 +309,27 @@ int parsBrakes(const char* callstr, int len)
     return ret;
 }
 
+char writerargs[PATH_MAX];
+
+static void* envvarWriter(void* frfd)
+{
+    int fromfd = *((int*)frfd);
+    char varname[PATH_MAX];
+    strcpy(varname, writerargs);
+    char output[PATH_MAX];
+    int len = 0;
+    output[0] = 0;
+    char ch = 0;
+    while (read(fromfd, &ch, 1) > 0)
+    {
+        output[len] = ch;
+        ++len;
+        output[len] = 0;
+    }
+    setenv(varname, output, 1);
+    pthread_exit(NULL);
+}
+
 int oneStrCall(const char* callstr, char* path, JobsList* jobs, int infdFrom)
 {
     int i = 0;
@@ -433,6 +454,7 @@ int oneStrCall(const char* callstr, char* path, JobsList* jobs, int infdFrom)
         char* nextProg = callstr;
         int infd = infdFrom;
         int outfd = 1;
+        int outfdClosing = 0;
         int BGflag = RUN_FOREGROUND;
         while(callstr[i] != 0)
         {
@@ -456,8 +478,13 @@ int oneStrCall(const char* callstr, char* path, JobsList* jobs, int infdFrom)
                 sscanf(nextProg, ">%s", filename);
                 if (filename[0] == '$')
                 {
-                    filename[0] = '/';
-                    outfd = shm_open(filename, O_RDWR | O_CREAT, 0666); //TODO
+                    int outpipe[2];
+                    pipe(outpipe);
+                    outfd = outpipe[1];
+                    strcpy(writerargs, filename + 1);
+                    pthread_t writer;
+                    pthread_create(&writer, NULL, envvarWriter, (void*)(&outpipe[0]));
+                    outfdClosing = 1;
                 }
                 else
                     outfd = open(filename, O_RDWR | O_CREAT, 0666);
@@ -491,6 +518,11 @@ int oneStrCall(const char* callstr, char* path, JobsList* jobs, int infdFrom)
             printf("I can't find this comand: %s\n", comName);
             printf("You can try \"help\", but I think it will not help you\n");
             return -1;
+        }
+        if (outfdClosing != 0)
+        {
+            close(outfd);
+            outfdClosing = 0;
         }
         for (i = 0; i < progCount; ++i)
         {
