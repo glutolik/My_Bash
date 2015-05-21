@@ -486,8 +486,13 @@ int oneStrCall(const char* callstr, char* path, JobsList* jobs, int infdFrom)
                     pthread_create(&writer, NULL, envvarWriter, (void*)(&outpipe[0]));
                     outfdClosing = 1;
                 }
-                else
+                else if (filename[0] != '>')
                     outfd = open(filename, O_RDWR | O_CREAT, 0666);
+                else
+                {
+                    sscanf(nextProg, ">>%s", filename);
+                    outfd = open(filename, O_WRONLY | O_APPEND | O_CREAT, 0666);
+                }
             }
             else if (*nextProg == '<')
             {
